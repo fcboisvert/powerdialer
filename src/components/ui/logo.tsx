@@ -1,5 +1,7 @@
-
 import React from 'react';
+
+// Import the SVG as a React component (Vite/CRA compatible)
+import { ReactComponent as TexionLogoSVG } from '/texion-logo.svg'; // Use '?react' for Vite if needed
 
 interface LogoProps {
   variant?: 'text' | 'icon' | 'full';
@@ -7,8 +9,26 @@ interface LogoProps {
   className?: string;
 }
 
+/**
+ * Logo component. Now uses texion-logo.svg for icon/full variants.
+ * - 'icon': just the SVG
+ * - 'full': SVG + text
+ * - 'text': just the text
+ */
 const Logo = ({ variant = 'text', size = 'md', className = '' }: LogoProps) => {
-  const getSizeClasses = () => {
+  // Sizes for the SVG and text
+  const getSvgSize = () => {
+    switch (size) {
+      case 'sm':
+        return 28;
+      case 'lg':
+        return 48;
+      default:
+        return 36;
+    }
+  };
+
+  const getTextClass = () => {
     switch (size) {
       case 'sm':
         return 'text-lg';
@@ -19,50 +39,30 @@ const Logo = ({ variant = 'text', size = 'md', className = '' }: LogoProps) => {
     }
   };
 
-  const getIconSize = () => {
-    switch (size) {
-      case 'sm':
-        return { main: 'w-5 h-5', accent: 'w-3 h-3', base: 'w-5 h-1.5' };
-      case 'lg':
-        return { main: 'w-8 h-8', accent: 'w-6 h-6', base: 'w-8 h-3' };
-      default:
-        return 'w-6 h-6';
-    }
-  };
-
-  const iconSizes = getIconSize();
-
   if (variant === 'icon') {
     return (
-      <div className={`flex items-center justify-center ${className}`}>
-        <div className="relative">
-          {/* Main circle */}
-          <div className={`${typeof iconSizes === 'string' ? iconSizes : iconSizes.main} bg-texion-orange rounded-full`}></div>
-          {/* Top right accent */}
-          <div className={`absolute -top-1 -right-1 ${typeof iconSizes === 'string' ? 'w-4 h-4' : iconSizes.accent} bg-texion-orange rounded-sm`}></div>
-          {/* Bottom left accent */}
-          <div className={`absolute -bottom-1 left-1 ${typeof iconSizes === 'string' ? 'w-4 h-2' : iconSizes.base} bg-texion-orange rounded-b-full`}></div>
-        </div>
-      </div>
+      <span className={`inline-flex items-center ${className}`}>
+        <TexionLogoSVG width={getSvgSize()} height={getSvgSize()} />
+      </span>
     );
   }
 
-  return (
-    <div className={`flex items-center gap-3 ${className}`}>
-      {variant === 'full' && (
-        <div className="relative">
-          {/* Main circle */}
-          <div className={`${typeof iconSizes === 'string' ? iconSizes : iconSizes.main} bg-texion-orange rounded-full`}></div>
-          {/* Top right accent */}
-          <div className={`absolute -top-1 -right-1 ${typeof iconSizes === 'string' ? 'w-4 h-4' : iconSizes.accent} bg-texion-orange rounded-sm`}></div>
-          {/* Bottom left accent */}
-          <div className={`absolute -bottom-1 left-1 ${typeof iconSizes === 'string' ? 'w-4 h-2' : iconSizes.base} bg-texion-orange rounded-b-full`}></div>
-        </div>
-      )}
-      <span className={`font-texion font-semibold text-texion-black ${getSizeClasses()} tracking-tight`}>
-        texion
+  if (variant === 'full') {
+    return (
+      <span className={`inline-flex items-center gap-2 ${className}`}>
+        <TexionLogoSVG width={getSvgSize()} height={getSvgSize()} />
+        <span className={`font-texion font-semibold text-texion-black ${getTextClass()} tracking-tight`}>
+          texion
+        </span>
       </span>
-    </div>
+    );
+  }
+
+  // fallback: text only
+  return (
+    <span className={`font-texion font-semibold text-texion-black ${getTextClass()} tracking-tight ${className}`}>
+      texion
+    </span>
   );
 };
 

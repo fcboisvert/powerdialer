@@ -4,11 +4,16 @@
     <meta charset="UTF-8" />
     <title>Powerdialer</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <!-- Optional: Link to your CSS if needed -->
+    <link rel="stylesheet" href="PowerDialer.css" />
   </head>
   <body>
     <div id="root"></div>
-    <!-- DO NOT REMOVE: This loads Twilio globally for your app! -->
+
+    <!-- Load Twilio SDK globally before your app scripts -->
     <script src="https://sdk.twilio.com/js/client/v1.13/twilio.min.js"></script>
-    <!-- Vite will inject your React script here automatically -->
+    <!-- If you're using Vite+React, Vite will inject your main app script here automatically. -->
+    <!-- If you need to include a manual JS file for the dialer (for example, plain JS), add it after Twilio: -->
+    <!-- <script src="/js/ton-power-dialer.js"></script> -->
   </body>
 </html>
