@@ -18,9 +18,7 @@ const Logo = ({
   size = "md",
   className = "",
 }: LogoProps) => {
-  // Map size prop to px for img, and text size for the wordmark
-  const svgPx =
-    size === "sm" ? 28 : size === "lg" ? 48 : 36;
+  const svgPx = size === "sm" ? 28 : size === "lg" ? 48 : 36;
   const textClass =
     size === "sm"
       ? "text-lg"
