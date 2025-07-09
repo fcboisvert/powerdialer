@@ -1,16 +1,18 @@
-.texion-dialer { max-width:650px; margin:20px auto; background:#fff; padding:20px; border-radius:10px; box-shadow:0 0 10px #0001; font-family:Arial; }
-.texion-title { text-align:center; color:#1e73be; margin-bottom:20px; }
-.texion-field { margin:10px 0; display:grid; grid-template-columns:160px 1fr; gap:10px; }
-.texion-field label { font-weight:bold; }
-.texion-status { background:#f0f0f0; padding:15px; border-radius:5px; margin:15px 0; font-weight:bold; }
-.texion-btn { background:#1e73be; color:#fff; border:none; padding:10px 15px; margin:5px; border-radius:5px; cursor:pointer; }
-.texion-btn:hover { background:#155a96; }
+.texion-dialer       { max-width:650px; margin:20px auto; background:#fff; padding:20px; border-radius:10px; box-shadow:0 0 10px #0001; font-family:Arial; }
+.texion-title        { text-align:center; color:#1e73be; margin-bottom:20px; }
+.texion-field        { margin:10px 0; display:grid; grid-template-columns:160px 1fr; gap:10px; }
+.texion-field label  { font-weight:bold; }
+.texion-status       { background:#f0f0f0; padding:15px; border-radius:5px; margin:15px 0; font-weight:bold; }
+.texion-btn          { background:#1e73be; color:#fff; border:none; padding:10px 15px; margin:5px; border-radius:5px; cursor:pointer; }
+.texion-btn:hover    { background:#155a96; }
 .texion-btn:disabled { background:#ccc; cursor:not-allowed; }
-.texion-form { display:none; margin-top:20px; }
-.texion-form select, .texion-form textarea, .texion-form input { width:100%; padding:8px; margin:5px 0; border:1px solid #ccc; border-radius:4px; }
-.texion-login input { width:100%; padding:10px; margin:10px 0; border:1px solid #ccc; border-radius:5px; }
-.texion-error { background:#f8d7da; color:#721c24; padding:10px; border-radius:5px; margin:10px 0; display:none; }
-.texion-callerid { margin:10px 0 15px 0; }
+.texion-form         { display:none; margin-top:20px; }
+.texion-form select,
+.texion-form textarea,
+.texion-form input   { width:100%; padding:8px; margin:5px 0; border:1px solid #ccc; border-radius:4px; }
+.texion-login input  { width:100%; padding:10px; margin:10px 0; border:1px solid #ccc; border-radius:5px; }
+.texion-error        { background:#f8d7da; color:#721c24; padding:10px; border-radius:5px; margin:10px 0; display:none; }
+.texion-callerid     { margin:10px 0 15px 0; }
 .texion-callerid label { font-weight:bold; margin-right:10px; }
-.history-box { background:#f9f9f9; min-height:60px; border-radius:4px; border:1px solid #eee; padding:8px; font-size:0.96em; margin-bottom:5px; }
+.history-box         { background:#f9f9f9; min-height:60px; border-radius:4px; border:1px solid #eee; padding:8px; font-size:0.96em; margin-bottom:5px; }
 .texion-section-title { font-weight:bold; margin:20px 0 5px 0; color:#1e73be; }
