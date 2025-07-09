@@ -1,6 +1,6 @@
-// src/pages/Login.tsx
+// src/components/Login.tsx
 import { useState } from "react";
-import { Button } from "@/components/ui/button";   // shadcn/ui button
+import { Button } from "@/components/ui/button";
 import Logo from "/texion-logo.svg";
 
 export default function Login() {
@@ -10,8 +10,12 @@ export default function Login() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-zinc-100 via-white to-zinc-100 flex items-center justify-center px-4">
       <div className="w-full max-w-sm rounded-xl bg-white shadow-xl ring-1 ring-zinc-100 p-8">
-        {/* larger logo → h-16 (64 px) and extra margin */}
-        <img src={Logo} alt="texion" className="h-16 mx-auto mb-8" />
+        {/* bigger logo  ───────────────────────────────────────────── */}
+        <img
+          src={Logo}
+          alt="texion"
+          className="w-32 h-auto mx-auto mb-8" /* 128 px wide */
+        />
 
         <h2 className="text-center text-xl font-semibold">Connexion Agent</h2>
         <p className="text-center text-sm text-zinc-500 mb-6">
@@ -25,9 +29,10 @@ export default function Login() {
           id="user"
           type="text"
           value={user}
-          onChange={e => setUser(e.target.value)}
+          onChange={(e) => setUser(e.target.value)}
           placeholder="Entrez votre nom d'utilisateur"
           className="mb-4 w-full rounded-md border border-zinc-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+          required
         />
 
         <label className="block text-sm font-medium mb-1" htmlFor="pass">
@@ -37,9 +42,10 @@ export default function Login() {
           id="pass"
           type="password"
           value={pass}
-          onChange={e => setPass(e.target.value)}
+          onChange={(e) => setPass(e.target.value)}
           placeholder="Entrez votre mot de passe"
           className="mb-6 w-full rounded-md border border-zinc-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+          required
         />
 
         <Button className="w-full bg-gradient-to-r from-primary-600 to-primary-500 hover:from-primary-700 hover:to-primary-600">
