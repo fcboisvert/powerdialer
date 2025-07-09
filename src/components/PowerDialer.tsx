@@ -1,6 +1,5 @@
 // src/components/PowerDialer.tsx
 import React, { useEffect, useState, useRef } from "react";
-import "./PowerDialer.css";
 import type { CallRecord } from "@/types/dialer";
 
 declare global {
