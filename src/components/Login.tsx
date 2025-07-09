@@ -11,7 +11,7 @@ export default function Login() {
     <div className="min-h-screen bg-gradient-to-br from-zinc-100 via-white to-zinc-100 flex items-center justify-center px-4">
       <div className="w-full max-w-sm rounded-xl bg-white shadow-xl ring-1 ring-zinc-100 p-8">
         {/* logo now 192 px wide → w-48 */}
-        <img src={Logo} alt="texion" className="w-48 h-auto mx-auto mb-8" />
+        <img src="/texion-logo.svg" alt="texion" className="w-56 h-auto mx-auto mb-8" />
 
         <h2 className="text-center text-xl font-semibold">Connexion Agent</h2>
         <p className="text-center text-sm text-zinc-500 mb-6">
