@@ -1,57 +1,60 @@
-import React from 'react';
-
-// Import the SVG as a React component (Vite/CRA compatible)
-import { ReactComponent as TexionLogoSVG } from '/texion-logo.svg'; // Use '?react' for Vite if needed
+// src/components/ui/Logo.tsx
+import React from "react";
 
 interface LogoProps {
-  variant?: 'text' | 'icon' | 'full';
-  size?: 'sm' | 'md' | 'lg';
+  variant?: "text" | "icon" | "full";
+  size?: "sm" | "md" | "lg";
   className?: string;
 }
 
 /**
- * Logo component. Now uses texion-logo.svg for icon/full variants.
- * - 'icon': just the SVG
- * - 'full': SVG + text
- * - 'text': just the text
+ * Logo component (robust for Vite, CRA, Cloudflare, etc.)
+ * - 'icon': SVG logo only
+ * - 'full': SVG + "texion" text
+ * - 'text': just "texion"
  */
-const Logo = ({ variant = 'text', size = 'md', className = '' }: LogoProps) => {
-  // Sizes for the SVG and text
-  const getSvgSize = () => {
-    switch (size) {
-      case 'sm':
-        return 28;
-      case 'lg':
-        return 48;
-      default:
-        return 36;
-    }
-  };
+const Logo = ({
+  variant = "text",
+  size = "md",
+  className = "",
+}: LogoProps) => {
+  // Map size prop to px for img, and text size for the wordmark
+  const svgPx =
+    size === "sm" ? 28 : size === "lg" ? 48 : 36;
+  const textClass =
+    size === "sm"
+      ? "text-lg"
+      : size === "lg"
+      ? "text-3xl"
+      : "text-2xl";
 
-  const getTextClass = () => {
-    switch (size) {
-      case 'sm':
-        return 'text-lg';
-      case 'lg':
-        return 'text-3xl';
-      default:
-        return 'text-2xl';
-    }
-  };
-
-  if (variant === 'icon') {
+  if (variant === "icon") {
     return (
       <span className={`inline-flex items-center ${className}`}>
-        <TexionLogoSVG width={getSvgSize()} height={getSvgSize()} />
+        <img
+          src="/texion-logo.svg"
+          alt="Texion logo"
+          width={svgPx}
+          height={svgPx}
+          style={{ display: "block" }}
+        />
       </span>
     );
   }
 
-  if (variant === 'full') {
+  if (variant === "full") {
     return (
       <span className={`inline-flex items-center gap-2 ${className}`}>
-        <TexionLogoSVG width={getSvgSize()} height={getSvgSize()} />
-        <span className={`font-texion font-semibold text-texion-black ${getTextClass()} tracking-tight`}>
+        <img
+          src="/texion-logo.svg"
+          alt="Texion logo"
+          width={svgPx}
+          height={svgPx}
+          style={{ display: "block" }}
+        />
+        <span
+          className={`font-texion font-semibold text-texion-black ${textClass} tracking-tight`}
+        >
           texion
         </span>
       </span>
@@ -60,7 +63,9 @@ const Logo = ({ variant = 'text', size = 'md', className = '' }: LogoProps) => {
 
   // fallback: text only
   return (
-    <span className={`font-texion font-semibold text-texion-black ${getTextClass()} tracking-tight ${className}`}>
+    <span
+      className={`font-texion font-semibold text-texion-black ${textClass} tracking-tight ${className}`}
+    >
       texion
     </span>
   );
