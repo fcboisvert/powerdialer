@@ -6,9 +6,6 @@ declare module "*.css" {
   export default content;
 }
 
-// Universal (non-modular) CSS import fallback
-declare module "*.css";
-
 // Type for SVG imports as URL/string (for <img src=...>)
 declare module "*.svg" {
   const content: string;
