@@ -9,12 +9,10 @@ declare global {
   }
 }
 
-// (Load Twilio JS via <script> in public/index.html for this to work.)
-
 const MAKE_WEBHOOK_URL = "https://hook.us2.make.com/elyl7t9siafnen8m6xentift6334yaek";
 const AGENT_CALLER_IDS: Record<string, string[]> = {
   frederic: ["+14388178171"],
-  simon: ["+14388178177"]
+  simon: ["+14388178177"],
 };
 
 const getAgent = (): string => localStorage.getItem("texion_agent") || "frederic";
@@ -24,7 +22,7 @@ const PowerDialer: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState<string>("Chargement des contacts...");
   const [currentIdx, setCurrentIdx] = useState(0);
-  const [agent, setAgent] = useState<string>(getAgent());
+  const [agent] = useState<string>(getAgent());
   const [callerId, setCallerId] = useState<string>("");
   const [callActive, setCallActive] = useState(false);
   const [showResultForm, setShowResultForm] = useState(false);
@@ -60,7 +58,6 @@ const PowerDialer: React.FC = () => {
     if (ids.length > 0) setCallerId(ids[0]);
   }, [agent, records]);
 
-  // --- Twilio setup on mount ---
   useEffect(() => {
     if (!window.Twilio) {
       setStatus("Twilio SDK non chargé !");
@@ -92,7 +89,6 @@ const PowerDialer: React.FC = () => {
       }
     };
     initTwilio();
-    // cleanup
     return () => {
       if (device) device.destroy();
     };
@@ -159,8 +155,6 @@ const PowerDialer: React.FC = () => {
     localStorage.removeItem("texion_agent");
     window.location.reload();
   };
-
-  // -- Form handlers (add as needed for saving results) --
 
   return (
     <div className="texion-dialer">
