@@ -1,13 +1,5 @@
-/* ────────────────────────────────────────────────────────────
-   src/index.css
-   Loads Tailwind + optional global tweaks
-────────────────────────────────────────────────────────────── */
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* optional: global font smoothing */
-html {
-  -webkit-font-smoothing: antialiased;
-}
+html { -webkit-font-smoothing: antialiased; }

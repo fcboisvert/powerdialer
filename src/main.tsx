@@ -1,7 +1,7 @@
 // src/main.tsx
  import React from 'react'
  import ReactDOM from 'react-dom/client'
- import './index.css'          // 👈  add this line back
+ import './index.css';          // keep this line near the top
 
  import App from './App.tsx'
  
