@@ -1,25 +1,34 @@
 {
   "compilerOptions": {
+    /* Target + module */
     "target": "ES2020",
-    "useDefineForClassFields": true,
-    "lib": ["ES2020", "DOM", "DOM.Iterable"],
     "module": "ESNext",
     "moduleResolution": "bundler",
+
+    /* Library + JSX */
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx",
+
+    /* Strict – but relaxed on unused for first deploy */
+    "strict": true,
     "skipLibCheck": true,
-    "verbatimModuleSyntax": false,
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+
+    /* Nice-to-haves */
+    "useDefineForClassFields": true,
     "allowImportingTsExtensions": true,
     "resolveJsonModule": true,
     "isolatedModules": true,
     "noEmit": true,
-    "jsx": "react-jsx",
-    "strict": true,
-    "noUnusedLocals": false,
-    "noUnusedParameters": false,
     "noFallthroughCasesInSwitch": true,
+
+    /* Path alias (@/…) */
     "baseUrl": ".",
-    "paths": {
-      "@/*": ["./src/*"]
-    }
+    "paths": { "@/*": ["./src/*"] },
+
+    /* Give TS access to Vite + Node globals */
+    "types": ["vite/client", "node"]
   },
   "include": ["src/**/*"]
 }
