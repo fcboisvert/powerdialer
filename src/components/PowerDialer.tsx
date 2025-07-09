@@ -1,11 +1,15 @@
+// src/components/PowerDialer.tsx
 import React, { useEffect, useState, useRef } from "react";
 import "./PowerDialer.css";
 import type { CallRecord } from "@/types/dialer";
 
 declare global {
-  interface Window { Twilio: any }
+  interface Window {
+    Twilio: any;
+  }
 }
-// (You must load Twilio JS via a <script> tag in your index.html for this to work in React!)
+
+// (Load Twilio JS via <script> in public/index.html for this to work.)
 
 const MAKE_WEBHOOK_URL = "https://hook.us2.make.com/elyl7t9siafnen8m6xentift6334yaek";
 const AGENT_CALLER_IDS: Record<string, string[]> = {
@@ -13,9 +17,9 @@ const AGENT_CALLER_IDS: Record<string, string[]> = {
   simon: ["+14388178177"]
 };
 
-const getAgent = (): string => localStorage.getItem('texion_agent') || "frederic";
+const getAgent = (): string => localStorage.getItem("texion_agent") || "frederic";
 
-export const PowerDialer: React.FC = () => {
+const PowerDialer: React.FC = () => {
   const [records, setRecords] = useState<CallRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState<string>("Chargement des contacts...");
@@ -38,13 +42,13 @@ export const PowerDialer: React.FC = () => {
           setRecords(list);
           setStatus(`✅ ${list.length} contact(s) chargé(s)`);
         } else {
-          setRecords([{ id: 'test', 'Full Name': ['Test'], 'Mobile Phone': ['+15140000000'] } as any]);
+          setRecords([{ id: "test", "Full Name": ["Test"], "Mobile Phone": ["+15140000000"] } as any]);
           setStatus("⚠️ Mode test activé");
         }
         setLoading(false);
       })
       .catch(() => {
-        setRecords([{ id: 'test', 'Full Name': ['Test'], 'Mobile Phone': ['+15140000000'] } as any]);
+        setRecords([{ id: "test", "Full Name": ["Test"], "Mobile Phone": ["+15140000000"] } as any]);
         setStatus("⚠️ Erreur chargement, mode test activé");
         setLoading(false);
       });
@@ -89,12 +93,14 @@ export const PowerDialer: React.FC = () => {
     };
     initTwilio();
     // cleanup
-    return () => { if (device) device.destroy(); }
+    return () => {
+      if (device) device.destroy();
+    };
   }, [agent]);
 
   if (loading) return <div>{status}</div>;
   const current = records[currentIdx];
-  const getField = (obj: any, key: string, def='—') =>
+  const getField = (obj: any, key: string, def = "—") =>
     Array.isArray(obj?.[key]) ? (obj[key][0] || def) : (obj?.[key] || def);
 
   // -- Button handlers --
@@ -103,7 +109,6 @@ export const PowerDialer: React.FC = () => {
       setStatus("Twilio non initialisé");
       return;
     }
-    // Pick best number
     let phoneNumber = getField(current, "Mobile Phone");
     if (!phoneNumber || phoneNumber === "—") phoneNumber = getField(current, "Direct Phone");
     if (!phoneNumber || phoneNumber === "—") phoneNumber = getField(current, "Company Phone");
@@ -160,7 +165,7 @@ export const PowerDialer: React.FC = () => {
   return (
     <div className="texion-dialer">
       <h2 className="texion-title">📞 POWER DIALER TEXION</h2>
-      <div style={{textAlign:"center", fontWeight:"bold", marginBottom:10}}>
+      <div style={{ textAlign: "center", fontWeight: "bold", marginBottom: 10 }}>
         {currentIdx + 1}/{records.length} – Agent: {agent.toUpperCase()}
       </div>
       <div className="texion-callerid">
@@ -176,16 +181,16 @@ export const PowerDialer: React.FC = () => {
         </select>
       </div>
       <div className="texion-section-title">Infos Prospect</div>
-      <div className="texion-field"><label>Nom :</label><span>{getField(current, 'Full Name')}</span></div>
-      <div className="texion-field"><label>Fonction :</label><span>{getField(current, 'Job Title')}</span></div>
-      <div className="texion-field"><label>Entreprise :</label><span>{getField(current, 'Nom de la compagnie')}</span></div>
-      <div className="texion-field"><label>Secteur :</label><span>{getField(current, 'Sector')}</span></div>
-      <div className="texion-field"><label>Téléphone mobile :</label><span>{getField(current, 'Mobile Phone')}</span></div>
-      <div className="texion-field"><label>Téléphone direct :</label><span>{getField(current, 'Direct Phone')}</span></div>
-      <div className="texion-field"><label>Téléphone entreprise :</label><span>{getField(current, 'Company Phone')}</span></div>
+      <div className="texion-field"><label>Nom :</label><span>{getField(current, "Full Name")}</span></div>
+      <div className="texion-field"><label>Fonction :</label><span>{getField(current, "Job Title")}</span></div>
+      <div className="texion-field"><label>Entreprise :</label><span>{getField(current, "Nom de la compagnie")}</span></div>
+      <div className="texion-field"><label>Secteur :</label><span>{getField(current, "Sector")}</span></div>
+      <div className="texion-field"><label>Téléphone mobile :</label><span>{getField(current, "Mobile Phone")}</span></div>
+      <div className="texion-field"><label>Téléphone direct :</label><span>{getField(current, "Direct Phone")}</span></div>
+      <div className="texion-field"><label>Téléphone entreprise :</label><span>{getField(current, "Company Phone")}</span></div>
       <div className="texion-section-title">Infos Activité</div>
       <div className="texion-field"><label>Nom de l'activité :</label><span>{getField(current, "Nom de l'Activité")}</span></div>
-      <div className="texion-field"><label>Date Due :</label><span>{getField(current, 'Date Due')}</span></div>
+      <div className="texion-field"><label>Date Due :</label><span>{getField(current, "Date Due")}</span></div>
       <div className="texion-field"><label>Statut :</label><span>{getField(current, "Statut de l'Activité", "À Faire")}</span></div>
       <div className="texion-status">Statut : {status}</div>
       <div>
@@ -196,9 +201,9 @@ export const PowerDialer: React.FC = () => {
         <button className="texion-btn" onClick={handleLogout}>🔐 Logout</button>
       </div>
       {showResultForm && (
-        <div className="texion-form" style={{display:"block",marginTop:20}}>
+        <div className="texion-form" style={{ display: "block", marginTop: 20 }}>
           <h3>Résultat de l'appel</h3>
-          {/* Port your form fields here */}
+          {/* Add form fields for saving results here */}
           <button className="texion-btn">💾 Sauvegarder & Suivant</button>
         </div>
       )}
