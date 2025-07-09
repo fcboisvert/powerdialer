@@ -1,4 +1,3 @@
-// src/components/PowerDialer.tsx
 import React, { useEffect, useState, useRef } from "react";
 import type { CallRecord } from "@/types/dialer";
 
@@ -26,7 +25,6 @@ const PowerDialer: React.FC = () => {
   const [callActive, setCallActive] = useState(false);
   const [showResultForm, setShowResultForm] = useState(false);
 
-  // Twilio refs
   const twilioDevice = useRef<any>(null);
   const connection = useRef<any>(null);
 
@@ -52,7 +50,6 @@ const PowerDialer: React.FC = () => {
   }, [agent]);
 
   useEffect(() => {
-    // Set default callerId after agent/records load
     const ids = AGENT_CALLER_IDS[agent] || [];
     if (ids.length > 0) setCallerId(ids[0]);
   }, [agent, records]);
@@ -98,7 +95,6 @@ const PowerDialer: React.FC = () => {
   const getField = (obj: any, key: string, def = "—") =>
     Array.isArray(obj?.[key]) ? (obj[key][0] || def) : (obj?.[key] || def);
 
-  // -- Button handlers --
   const handleCall = () => {
     if (!twilioDevice.current) {
       setStatus("Twilio non initialisé");
