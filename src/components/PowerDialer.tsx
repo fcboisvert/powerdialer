@@ -24,6 +24,9 @@ const AGENT_CALLER_IDS: Record<string, string[]> = {
   frederic: ["+14388178171"],
   simon: ["+14388178177"]
 };
+
+
+
 const getAgent = () => localStorage.getItem("texion_agent") || "frederic";
 
 /* ─────────── component ─────────── */
@@ -121,6 +124,8 @@ export default function PowerDialer() {
   const get = (obj: any, key: string, d = "—") =>
     Array.isArray(obj?.[key]) ? obj[key][0] || d : obj?.[key] || d;
 
+
+
   /* actions */
   const dial = () => {
     if (!twilioDevice.current) return setStatus("Twilio non initialisé");
@@ -129,8 +134,10 @@ export default function PowerDialer() {
     if (num === "—") num = get(current, "Company Phone");
     if (num === "—") return setStatus("Aucun numéro valide !");
     if (!callerId) return setStatus("Sélectionnez un Caller ID !");
+
     setStatus(`Appel → ${num}`);
     setShowForm(false);
+    
     connection.current = twilioDevice.current.connect({
       To: num,
       From: callerId,
@@ -138,6 +145,7 @@ export default function PowerDialer() {
       flow_channel_address: callerId
     });
   };
+
   const simulate = () => {
     setStatus("🎭 Simulation…");
     setCallActive(true);
@@ -148,17 +156,20 @@ export default function PowerDialer() {
       setShowForm(true);
     }, 2000);
   };
+  
   const hang = () => {
     twilioDevice.current?.disconnectAll();
     setStatus("📞 Appel raccroché");
     setCallActive(false);
     setShowForm(true);
   };
+  
   const next = () => {
     setIdx((i) => (i + 1 < records.length ? i + 1 : i));
     setShowForm(false);
     setStatus("➡️ Suivant");
   };
+  
   const logout = () => {
     localStorage.removeItem("texion_agent");
     window.location.reload();
@@ -195,6 +206,8 @@ export default function PowerDialer() {
           </select>
         </div>
 
+
+
         {/* 2-column grid */}
         <div className="grid md:grid-cols-2 gap-x-12 gap-y-6 text-sm">
           <div>
@@ -211,6 +224,7 @@ export default function PowerDialer() {
           <div>
             <h3 className="mb-2 font-semibold text-zinc-800">Infos Activité</h3>
             <Field label="Nom de l'activité" value={get(current, "Nom de l'Activité")} />
+            <Field label="Type d'activité" value={get(current, "Activité 2.0 H.C.")} />
             <Field label="Date Due" value={get(current, "Date Due")} />
             <Field label="Statut" value={get(current, "Statut de l'Activité", "À Faire")} />
           </div>
