@@ -124,6 +124,13 @@ export default function PowerDialer() {
   const get = (obj: any, key: string, d = "—") =>
     Array.isArray(obj?.[key]) ? obj[key][0] || d : obj?.[key] || d;
 
+  // Extract Flow SID from the Flow URL
+  const getFlowSidFromUrl = (flowUrl: string): string | null => {
+    if (!flowUrl || flowUrl === "—") return null;
+    const match = flowUrl.match(/\/Flows\/([A-Za-z0-9]+)\/Executions/);
+    return match ? match[1] : null;
+  };
+
 
 
   /* actions */
@@ -135,15 +142,26 @@ export default function PowerDialer() {
     if (num === "—") return setStatus("Aucun numéro valide !");
     if (!callerId) return setStatus("Sélectionnez un Caller ID !");
 
-    setStatus(`Appel → ${num}`);
+    // Get the Flow URL from Make.com and extract the Flow SID
+    const flowUrl = get(current, "Flow_URL");
+    const flowSid = getFlowSidFromUrl(flowUrl);
+    
+    setStatus(`Appel → ${num}${flowSid ? ` (Flow: ${flowSid})` : ''}`);
     setShowForm(false);
     
-    connection.current = twilioDevice.current.connect({
+    const connectionParams: any = {
       To: num,
       From: callerId,
       contact_channel_address: num,
       flow_channel_address: callerId
-    });
+    };
+
+    // Add Flow SID if available
+    if (flowSid) {
+      connectionParams.flowSid = flowSid;
+    }
+    
+    connection.current = twilioDevice.current.connect(connectionParams);
   };
 
   const simulate = () => {
@@ -192,7 +210,15 @@ export default function PowerDialer() {
           </span>
         </header>
 
-        {/* caller-ID selector */}
+        {/* Flow indicator */}
+        {get(current, "Flow_URL") !== "—" && (
+          <div className="flex items-center gap-2 text-sm">
+            <span className="font-medium">Flow assigné&nbsp;:</span>
+            <span className="text-blue-600 font-mono text-xs">
+              {getFlowSidFromUrl(get(current, "Flow_URL")) || "Non détecté"}
+            </span>
+          </div>
+        )}
         <div className="flex items-center gap-2 text-sm">
           <span className="font-medium">Numéro sortant&nbsp;:</span>
           <select
@@ -227,6 +253,7 @@ export default function PowerDialer() {
             <Field label="Type d'activité" value={get(current, "Activité 2.0 H.C.")} />
             <Field label="Date Due" value={get(current, "Date Due")} />
             <Field label="Statut" value={get(current, "Statut de l'Activité", "À Faire")} />
+            <Field label="Flow URL" value={get(current, "Flow_URL") !== "—" ? "Configuré" : "Non configuré"} />
           </div>
         </div>
 
