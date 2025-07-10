@@ -361,12 +361,21 @@ export default function PowerDialer() {
               <div>
                 <label className="block text-sm font-medium mb-1">Résultat de l'appel:</label>
                 <select className="w-full border rounded px-3 py-2 text-sm">
-                  <option>Intéressé - RDV programmé</option>
-                  <option>Intéressé - Rappel plus tard</option>
-                  <option>Pas intéressé</option>
-                  <option>Pas disponible - Laisser message</option>
-                  <option>Numéro invalide</option>
-                  <option>Autre</option>
+                  <option value="">-- Sélectionner un résultat --</option>
+                  <option value="S_O">S_O</option>
+                  <option value="Rencontre_Expl._Planifiee">Rencontre_Expl._Planifiee</option>
+                  <option value="Rencontre_Besoin_Planifiee">Rencontre_Besoin_Planifiee</option>
+                  <option value="Visite_Planifiee">Visite_Planifiee</option>
+                  <option value="Offre_Planifiee">Offre_Planifiee</option>
+                  <option value="Touchbase_Planifiee">Touchbase_Planifiee</option>
+                  <option value="Relancer_Dans_X">Relancer_Dans_X</option>
+                  <option value="Info_Par_Courriel">Info_Par_Courriel</option>
+                  <option value="Boite_Vocale">Boite_Vocale</option>
+                  <option value="Pas_Joignable">Pas_Joignable</option>
+                  <option value="Pas_Interesse">Pas_Interesse</option>
+                  <option value="Demande_Lien_Booking">Demande_Lien_Booking</option>
+                  <option value="Me_Refere_Interne">Me_Refere_Interne</option>
+                  <option value="Me_Refere_Externe">Me_Refere_Externe</option>
                 </select>
               </div>
               <div>
