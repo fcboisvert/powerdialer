@@ -146,7 +146,7 @@ function resp(data: any, status: number, headers: Record<string, string>) {
   });
 }
 
-// Handles Airtable pagination (up to thousands of records)
+// Handles  Airtable pagination (up to thousands of records)
 async function fetchAllAirtable(
   baseUrl: string,
   token: string
