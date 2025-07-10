@@ -1,0 +1,7 @@
+name = "powerdialer-worker"
+compatibility_date = "2025-07-10"
+
+[vars]
+AIRTABLE_BASE = "apprTpOIFRuckIZJz"
+AIRTABLE_TABLE = "Interaction / Activities"
+# Do NOT add AIRTABLE_TOKEN here; you set it as a secret already.
