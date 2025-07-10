@@ -48,7 +48,20 @@ export default function PowerDialer() {
   useEffect(() => {
     fetch(`${MAKE_WEBHOOK_URL}?agent=${encodeURIComponent(agent)}`)
       .then((r) => r.json())
-      .then((list) => {
+      .then((response) => {
+        console.log("Make.com response:", response); // Debug log
+        
+        // Handle the key-value structure from Make.com
+        let list: any[] = [];
+        
+        if (Array.isArray(response)) {
+          // Direct array response
+          list = response;
+        } else if (response && typeof response === 'object') {
+          // Key-value response where agent name is the key
+          list = response[agent] || [];
+        }
+        
         if (Array.isArray(list) && list.length) {
           setRecords(list);
           setStatus(`✅ ${list.length} contact(s) chargé(s)`);
@@ -66,7 +79,8 @@ export default function PowerDialer() {
           setStatus("⚠️ Mode test activé");
         }
       })
-      .catch(() => {
+      .catch((error) => {
+        console.error("Fetch error:", error); // Debug log
         setRecords([
           {
             "Nom de l'Activite": "Test Activity",
