@@ -17,8 +17,7 @@ declare global {
 }
 
 /* ─────────── config ─────────── */
-const MAKE_WEBHOOK_URL =
-  "https://hook.us2.make.com/elyl7t9siafnen8m6xentift6334yaek";
+const QUEUE_API_URL = "https://texion.app/api/queue";
 
 const AGENT_CALLER_IDS: Record<string, string[]> = {
   frederic: ["+14388178171"],
@@ -44,54 +43,83 @@ export default function PowerDialer() {
   const twilioDevice = useRef<any>(null);
   const connection = useRef<any>(null);
 
-  /* fetch queue from Make */
+  /* fetch queue from API */
   useEffect(() => {
-    fetch(`${MAKE_WEBHOOK_URL}?agent=${encodeURIComponent(agent)}`)
+    const url = `${QUEUE_API_URL}?agent=${encodeURIComponent(agent)}`;
+    console.log("Fetching from queue API:", url); // Debug log
+    
+    fetch(url)
       .then((r) => r.json())
       .then((response) => {
-        console.log("Make.com response:", response); // Debug log
+        console.log("Queue API response:", response); // Debug log
+        console.log("Agent being requested:", agent); // Debug log
+        console.log("Response type:", typeof response); // Debug log
+        console.log("Is array:", Array.isArray(response)); // Debug log
         
-        // Handle the key-value structure from Make.com
+        // Handle the response from your queue API
         let list: any[] = [];
         
         if (Array.isArray(response)) {
           // Direct array response
           list = response;
+          console.log("Using direct array, length:", list.length);
         } else if (response && typeof response === 'object') {
           // Key-value response where agent name is the key
-          list = response[agent] || [];
+          console.log("Object keys:", Object.keys(response));
+          list = response[agent] || response[agent.toLowerCase()] || response[agent.toUpperCase()] || [];
+          console.log("Using key-value, agent key:", agent, "list length:", list.length);
         }
         
         if (Array.isArray(list) && list.length) {
+          console.log("Setting records:", list);
           setRecords(list);
-          setStatus(`✅ ${list.length} contact(s) chargé(s)`);
+          setStatus(`✅ ${list.length} contact(s) en file d'attente`);
         } else {
+          console.log("No data in queue, using test data");
           setRecords([
             {
-              "Nom de l'Activite": "Test Activity",
+              "Nom de l'Activite": "SPARK Microsystems-Jean-Sebastien Poirier-T2-0.3 Cold Call 1",
               "Flow_URL": "https://studio.twilio.com/v2/Flows/FW236e663e008973ab36cbfcdc706b6d97/Executions",
-              "Full_Name": "Test User",
-              "Mobile_Phone": "+15140000000",
-              "Job_Title": "Test Position",
-              "Nom_de_la_compagnie": "Test Company"
+              "Full_Name": "Jean-Sebastien Poirier",
+              "Mobile_Phone": "15148060649",
+              "Job_Title": "Director of Operations and Quality",
+              "Nom_de_la_compagnie": "SPARK Microsystems",
+              "LinkedIn_URL": "https://www.linkedin.com/in/ACwAAB99-_wBx7uE2Au4xf9ALpUwH_EeWTa8ifU",
+              "Direct_Phone": "438-375-3990",
+              "Company_Phone": "438-375-3990",
+              "Priorite": "2",
+              "Statut_de_l_Activite": "À Faire",
+              "Linked_Notes": "",
+              "Date et Heure Rencontre": "",
+              "Message_content": "",
+              "Resultat_Appel": ""
             } as any
           ]);
-          setStatus("⚠️ Mode test activé");
+          setStatus(`⚠️ File d'attente vide pour ${agent} - Mode test`);
         }
       })
       .catch((error) => {
-        console.error("Fetch error:", error); // Debug log
+        console.error("Queue API error:", error); // Debug log
         setRecords([
           {
-            "Nom de l'Activite": "Test Activity",
+            "Nom de l'Activite": "SPARK Microsystems-Jean-Sebastien Poirier-T2-0.3 Cold Call 1",
             "Flow_URL": "https://studio.twilio.com/v2/Flows/FW236e663e008973ab36cbfcdc706b6d97/Executions",
-            "Full_Name": "Test User",
-            "Mobile_Phone": "+15140000000",
-            "Job_Title": "Test Position",
-            "Nom_de_la_compagnie": "Test Company"
+            "Full_Name": "Jean-Sebastien Poirier",
+            "Mobile_Phone": "15148060649",
+            "Job_Title": "Director of Operations and Quality",
+            "Nom_de_la_compagnie": "SPARK Microsystems",
+            "LinkedIn_URL": "https://www.linkedin.com/in/ACwAAB99-_wBx7uE2Au4xf9ALpUwH_EeWTa8ifU",
+            "Direct_Phone": "438-375-3990",
+            "Company_Phone": "438-375-3990",
+            "Priorite": "2",
+            "Statut_de_l_Activite": "À Faire",
+            "Linked_Notes": "",
+            "Date et Heure Rencontre": "",
+            "Message_content": "",
+            "Resultat_Appel": ""
           } as any
         ]);
-        setStatus("⚠️ Erreur chargement, mode test activé");
+        setStatus("⚠️ Erreur API file d'attente - Mode test");
       })
       .finally(() => setLoading(false));
   }, [agent]);
