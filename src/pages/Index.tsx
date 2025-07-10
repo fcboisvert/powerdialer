@@ -8,11 +8,9 @@ type IndexProps = {
 
 export default function Index({ agent, onLogout }: IndexProps) {
   return (
-    <div>
-      <div style={{ color: "#888", fontSize: 12, margin: "16px 0" }}>
-        Index page loaded ({agent})
-      </div>
-      <PowerDialer agent={agent} onLogout={onLogout} />
+    <div className="min-h-screen">
+      {/* PowerDialer handles its own agent and logout logic */}
+      <PowerDialer />
     </div>
   );
 }

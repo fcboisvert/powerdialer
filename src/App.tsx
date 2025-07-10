@@ -4,6 +4,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 
 import { TooltipProvider } from "./components/ui/tooltip";
 import { Toaster } from "./components/ui/toaster";
+import CallWebhookHandler from "./components/CallWebhookHandler";
 import Login from "./pages/Login";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
@@ -96,6 +97,7 @@ export default function App() {
       <TooltipProvider>
         <Toaster />
         <TwilioDeviceContext.Provider value={twilioDevice}>
+          <CallWebhookHandler />
           <BrowserRouter>
             <Routes>
               {!agent ? (

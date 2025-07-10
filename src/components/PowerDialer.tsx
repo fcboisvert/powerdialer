@@ -6,7 +6,9 @@ import {
   FlaskConical,
   PhoneOff,
   SkipForward,
-  Lock
+  Lock,
+  Clock,
+  CheckCircle
 } from "lucide-react";
 import Logo from "/texion-logo.svg";
 
@@ -18,13 +20,12 @@ declare global {
 
 /* ─────────── config ─────────── */
 const QUEUE_API_URL = "https://texion.app/api/queue";
+const AIRTABLE_API_URL = "https://texion.app/api/airtable";
 
 const AGENT_CALLER_IDS: Record<string, string[]> = {
   frederic: ["+14388178171"],
   simon: ["+14388178177"]
 };
-
-
 
 const getAgent = () => localStorage.getItem("texion_agent") || "frederic";
 
@@ -38,10 +39,69 @@ export default function PowerDialer() {
   const agent = getAgent();
   const [callerId, setCallerId] = useState("");
   const [callActive, setCallActive] = useState(false);
+  const [callState, setCallState] = useState<'idle' | 'calling' | 'waiting_outcome' | 'agent_connected'>('idle');
   const [showForm, setShowForm] = useState(false);
+  const [currentCallId, setCurrentCallId] = useState<string | null>(null);
+  const [callResult, setCallResult] = useState("");
+  const [callNotes, setCallNotes] = useState("");
 
   const twilioDevice = useRef<any>(null);
   const connection = useRef<any>(null);
+
+  /* Listen for call outcome webhooks */
+  useEffect(() => {
+    const handleCallOutcome = (event: CustomEvent) => {
+      const { outcome, callId, activity } = event.detail;
+      console.log("Received call outcome:", outcome, callId);
+      
+      if (callId === currentCallId) {
+        if (outcome === "Répondeur" || outcome === "Boite_Vocale") {
+          // Automatic voicemail outcome
+          setCallResult("Boite_Vocale");
+          setCallState('idle');
+          setCallActive(false);
+          updateCallResult("Boite_Vocale", "Message laissé automatiquement");
+          setStatus("📞 Message vocal laissé");
+          setTimeout(() => next(), 2000); // Auto advance after 2 seconds
+        } else if (outcome === "Répondu_Humain") {
+          // Human answered - agent needs to handle the call
+          setCallState('agent_connected');
+          setStatus("👤 Humain répondu - En conversation");
+          setShowForm(true);
+        } else if (outcome === "Pas_Joignable") {
+          // Not reachable
+          setCallResult("Pas_Joignable");
+          setCallState('idle');
+          setCallActive(false);
+          updateCallResult("Pas_Joignable", "Numéro non joignable");
+          setStatus("❌ Pas joignable");
+          setTimeout(() => next(), 2000);
+        }
+      }
+    };
+
+    window.addEventListener('callOutcome', handleCallOutcome as EventListener);
+    return () => window.removeEventListener('callOutcome', handleCallOutcome as EventListener);
+  }, [currentCallId]);
+
+  /* Update call result to Airtable */
+  const updateCallResult = async (result: string, notes: string) => {
+    try {
+      const current = records[idx];
+      await fetch(`${AIRTABLE_API_URL}/update-result`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          activityName: get(current, "Nom de l'Activite"),
+          result: result,
+          notes: notes,
+          agent: agent
+        })
+      });
+    } catch (error) {
+      console.error("Error updating call result:", error);
+    }
+  };
 
   /* fetch queue from API */
   useEffect(() => {
@@ -149,13 +209,19 @@ export default function PowerDialer() {
 
         device.on("ready", () => setStatus("Twilio prêt"));
         device.on("connect", () => {
-          setStatus("📞 Appel en cours…");
+          setStatus("📞 Appel connecté - En attente du résultat...");
           setCallActive(true);
+          setCallState('waiting_outcome');
         });
         device.on("disconnect", () => {
-          setStatus("🛑 Appel terminé");
+          if (callState === 'agent_connected') {
+            setStatus("📞 Conversation terminée");
+            setShowForm(true);
+          } else {
+            setStatus("🛑 Appel terminé");
+            setCallState('idle');
+          }
           setCallActive(false);
-          setShowForm(true);
         });
         device.on("error", (e: any) =>
           setStatus("Erreur Twilio: " + e.message)
@@ -189,24 +255,39 @@ export default function PowerDialer() {
   /* actions */
   const dial = () => {
     if (!twilioDevice.current) return setStatus("Twilio non initialisé");
+    if (callState !== 'idle') return setStatus("Appel en cours, veuillez patienter");
+    
     let num = get(current, "Mobile_Phone");
     if (num === "—") num = get(current, "Direct_Phone");
     if (num === "—") num = get(current, "Company_Phone");
     if (num === "—") return setStatus("Aucun numéro valide !");
     if (!callerId) return setStatus("Sélectionnez un Caller ID !");
 
-    // Get the Flow URL from Make.com and extract the Flow SID
+    // Get the Flow URL from the queue data and extract the Flow SID
     const flowUrl = get(current, "Flow_URL");
     const flowSid = getFlowSidFromUrl(flowUrl);
     
-    setStatus(`Appel → ${num}${flowSid ? ` (Flow: ${flowSid})` : ''}`);
+    // Generate unique call ID
+    const callId = `call_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    setCurrentCallId(callId);
+    
+    setCallState('calling');
+    setStatus(`📞 Composition → ${num}${flowSid ? ` (Flow: ${flowSid})` : ''}`);
     setShowForm(false);
+    setCallResult("");
+    setCallNotes("");
     
     const connectionParams: any = {
       To: num,
       From: callerId,
       contact_channel_address: num,
-      flow_channel_address: callerId
+      flow_channel_address: callerId,
+      // Pass activity information to the flow
+      activity: get(current, "Nom de l'Activite"),
+      callId: callId,
+      leadName: get(current, "Full_Name"),
+      company: get(current, "Nom_de_la_compagnie"),
+      agent: agent
     };
 
     // Add Flow SID if available
@@ -218,30 +299,61 @@ export default function PowerDialer() {
   };
 
   const simulate = () => {
-    setStatus("🎭 Simulation…");
+    if (callState !== 'idle') return setStatus("Appel en cours, veuillez patienter");
+    
+    setStatus("🎭 Simulation d'appel...");
     setCallActive(true);
+    setCallState('calling');
     setShowForm(false);
     setTimeout(() => {
-      setStatus("📞 Fin de la simulation");
+      setStatus("📞 Simulation - Boîte vocale");
       setCallActive(false);
-      setShowForm(true);
-    }, 2000);
+      setCallState('idle');
+      setCallResult("Boite_Vocale");
+      updateCallResult("Boite_Vocale", "Simulation - Message laissé");
+      setTimeout(() => next(), 2000);
+    }, 3000);
   };
   
   const hang = () => {
     twilioDevice.current?.disconnectAll();
     setStatus("📞 Appel raccroché");
     setCallActive(false);
-    setShowForm(true);
+    setCallState('idle');
+    setCurrentCallId(null);
+    setShowForm(false);
   };
   
   const next = () => {
+    if (callState !== 'idle') return setStatus("Terminez l'appel en cours avant de passer au suivant");
+    
     setIdx((i) => (i + 1 < records.length ? i + 1 : i));
     setShowForm(false);
-    setStatus("➡️ Suivant");
+    setCallResult("");
+    setCallNotes("");
+    setCurrentCallId(null);
+    setStatus("➡️ Contact suivant");
+  };
+
+  const saveAndNext = async () => {
+    if (!callResult) {
+      setStatus("❌ Veuillez sélectionner un résultat d'appel");
+      return;
+    }
+    
+    setStatus("💾 Sauvegarde en cours...");
+    await updateCallResult(callResult, callNotes);
+    setCallState('idle');
+    setStatus("✅ Résultat sauvegardé");
+    setTimeout(() => next(), 1000);
   };
   
   const logout = () => {
+    if (callState !== 'idle') {
+      if (!confirm("Un appel est en cours. Êtes-vous sûr de vouloir vous déconnecter ?")) {
+        return;
+      }
+    }
     localStorage.removeItem("texion_agent");
     window.location.reload();
   };
@@ -311,32 +423,42 @@ export default function PowerDialer() {
           </div>
         </div>
 
-        {/* status banner */}
-        <div className="rounded-md bg-zinc-50 ring-1 ring-zinc-100 px-4 py-3 text-sm">
-          Statut&nbsp;: {status}
+        {/* status banner with call state indicator */}
+        <div className={`rounded-md px-4 py-3 text-sm ring-1 ${
+          callState === 'calling' ? 'bg-blue-50 ring-blue-200 text-blue-800' :
+          callState === 'waiting_outcome' ? 'bg-yellow-50 ring-yellow-200 text-yellow-800' :
+          callState === 'agent_connected' ? 'bg-green-50 ring-green-200 text-green-800' :
+          'bg-zinc-50 ring-zinc-100'
+        }`}>
+          <div className="flex items-center gap-2">
+            {callState === 'calling' && <Phone className="w-4 h-4 animate-pulse" />}
+            {callState === 'waiting_outcome' && <Clock className="w-4 h-4 animate-spin" />}
+            {callState === 'agent_connected' && <CheckCircle className="w-4 h-4" />}
+            <span>Statut&nbsp;: {status}</span>
+          </div>
         </div>
 
         {/* buttons */}
         <div className="flex flex-wrap justify-center gap-3 pt-2">
-          <Action icon={Phone} onClick={dial} disabled={callActive}>
+          <Action icon={Phone} onClick={dial} disabled={callState !== 'idle'}>
             Appeler
           </Action>
-          <Action icon={FlaskConical} onClick={simulate} disabled={callActive}>
+          <Action icon={FlaskConical} onClick={simulate} disabled={callState !== 'idle'}>
             Simuler
           </Action>
-          <Action icon={PhoneOff} onClick={hang} disabled={!callActive}>
+          <Action icon={PhoneOff} onClick={hang} disabled={!callActive && callState === 'idle'}>
             Raccrocher
           </Action>
-          <Action icon={SkipForward} onClick={next} disabled={callActive}>
+          <Action icon={SkipForward} onClick={next} disabled={callState !== 'idle'}>
             Suivant
           </Action>
           <Action icon={Lock} onClick={logout}>Logout</Action>
         </div>
 
-        {/* result form placeholder */}
-        {showForm && (
+        {/* result form */}
+        {showForm && callState === 'agent_connected' && (
           <div className="mt-8 rounded-lg bg-zinc-50 ring-1 ring-zinc-100 p-6">
-            <h4 className="font-medium mb-4">Résultat de l'appel</h4>
+            <h4 className="font-medium mb-4">📞 Conversation terminée - Saisir le résultat</h4>
             
             {/* Show current message content if available */}
             {get(current, "Message_content") !== "—" && (
@@ -351,16 +473,20 @@ export default function PowerDialer() {
             {get(current, "Resultat_Appel") !== "—" && (
               <div className="mb-4 p-3 bg-green-50 rounded border-l-4 border-green-200">
                 <p className="text-sm text-green-800">
-                  <strong>Résultat actuel:</strong> {get(current, "Resultat_Appel")}
+                  <strong>Résultat précédent:</strong> {get(current, "Resultat_Appel")}
                 </p>
               </div>
             )}
 
-            {/* Placeholder for form inputs */}
+            {/* Form inputs */}
             <div className="space-y-3 mb-4">
               <div>
-                <label className="block text-sm font-medium mb-1">Résultat de l'appel:</label>
-                <select className="w-full border rounded px-3 py-2 text-sm">
+                <label className="block text-sm font-medium mb-1">Résultat de l'appel: *</label>
+                <select 
+                  className="w-full border rounded px-3 py-2 text-sm"
+                  value={callResult}
+                  onChange={(e) => setCallResult(e.target.value)}
+                >
                   <option value="">-- Sélectionner un résultat --</option>
                   <option value="S_O">S_O</option>
                   <option value="Rencontre_Expl._Planifiee">Rencontre_Expl._Planifiee</option>
@@ -384,11 +510,20 @@ export default function PowerDialer() {
                   className="w-full border rounded px-3 py-2 text-sm" 
                   rows={3}
                   placeholder="Notes sur l'appel..."
+                  value={callNotes}
+                  onChange={(e) => setCallNotes(e.target.value)}
                 ></textarea>
               </div>
             </div>
 
-            <Button onClick={next}>💾 Sauvegarder &amp; Suivant</Button>
+            <div className="flex gap-3">
+              <Button onClick={saveAndNext} disabled={!callResult}>
+                💾 Sauvegarder &amp; Suivant
+              </Button>
+              <Button variant="outline" onClick={hang}>
+                ❌ Annuler l'appel
+              </Button>
+            </div>
           </div>
         )}
       </section>
