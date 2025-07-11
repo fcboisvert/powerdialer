@@ -10,7 +10,6 @@ interface Env {
   AIRTABLE_TABLE: string;
 }
 
-// ─────────── Constants ─────────── //
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
@@ -37,7 +36,6 @@ type AirtableRecord = {
   fields: Record<string, any>;
 };
 
-// ─────────── Handler ─────────── //
 export const onRequest: PagesFunction<Env> = async ({ request, env }) => {
   const url = new URL(request.url);
   const method = request.method;
@@ -131,32 +129,32 @@ async function fetchAllAirtable(baseUrl: string, token: string): Promise<Airtabl
 
 function mapAirtableRecord(rec: AirtableRecord) {
   const f = rec.fields;
+  const safe = (key: string) => (f[key] ?? "").toString().trim();
+
   return {
     id: rec.id,
-    Full_Name: f["Full Name"] ?? "",
-    phones: [f["Mobile Phone"], f["Direct Phone"], f["Company Phone"]].filter(Boolean),
-    Mobile_Phone: f["Mobile Phone"] ?? null,
-    Direct_Phone: f["Direct Phone"] ?? null,
-    Company_Phone: f["Company Phone"] ?? null,
-    Job_Title: f["Job Title"] ?? "",
-    Nom_de_la_compagnie: f["Nom de la compagnie"] ?? "",
-    LinkedIn_URL: f["Contact LinkedIn URL"] ?? "",
-    "Nom de l'Activite": f["Nom de l’Activité"] ?? "",
-    Priorite: f["Priorité"] ?? null,
-    Statut_de_l_Activite: f["Statut de l'Activité"] ?? "",
-    Linked_Notes: f["Linked Notes"] ?? "",
-    Rencontres: f["Rencontres"] ?? "",
-    Opportunity: f["Opportunity"] ?? "",
-    "Activité 2.0": f["Activité 2.0"] ?? "",
-    "Activité 2.0 H.C.": f["Activité 2.0 H.C."] ?? "",
-    "Responsable de l'Activité": f["Responsable de l'Activité"] ?? "",
-    "Nom du Responsable": f["Nom du Responsable"] ?? "",
-    Entreprise: f["Entreprise (from Opportunity)"] ?? "",
-    "Type d'Activité 2.0": f["Type d'Activité 2.0"] ?? "",
-    Message_content: f["Message content"] ?? "",
-    Call_Triggered: f["Call Triggered"] ?? "",
-    Resultat_Appel: f["Résultat (Appel)"] ?? "",
-    "Date et Heure Rencontre": f["Date et Heure Rencontre"] ?? "",
-    Flow_URL: f["Flow URL"] ?? "",
+    Full_Name: safe("Full Name"),
+    Job_Title: safe("Job Title"),
+    Nom_de_la_compagnie: safe("Nom de la compagnie"),
+    LinkedIn_URL: safe("Contact LinkedIn URL"),
+    Mobile_Phone: safe("Mobile Phone"),
+    Direct_Phone: safe("Direct Phone"),
+    Company_Phone: safe("Company Phone"),
+    Nom_de_l_Activite: safe("Nom de l'Activite"),
+    Priorite: safe("Priorité"),
+    Date_et_Heure_Rencontre: safe("Notes Rencontres"),
+    Statut_de_l_Activite: safe("Statut de l'Activité"),
+    Linked_Notes: safe("Linked Notes"),
+    Flow_URL: safe("Flow URL"),
+    Message_content: safe("Message content"),
+    Resultat_Appel: safe("Résultat (Appel)"),
+    Opportunity: safe("Opportunity"),
+    "Activité 2.0": safe("Activité 2.0"),
+    "Activité 2.0 H.C.": safe("Activité 2.0 H.C."),
+    "Responsable de l'Activité": safe("Responsable de l'Activité"),
+    "Nom du Responsable": safe("Nom du Responsable"),
+    Entreprise: safe("Entreprise (from Opportunity)"),
+    "Type d'Activité 2.0": safe("Type d'Activité 2.0"),
+    Call_Triggered: safe("Call Triggered"),
   };
 }

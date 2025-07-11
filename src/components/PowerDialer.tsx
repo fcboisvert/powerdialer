@@ -98,30 +98,25 @@ export default function PowerDialer() {
 
         const normalized = result.map((lead) => ({
           id: lead.id,
-          "Nom de l'Activite": lead["Nom de l'Activite"] ?? "—",
-          "Activité 2.0": lead["Activité 2.0"] ?? "—",
-          "Activité 2.0 H.C.": lead["Activité 2.0 H.C."] ?? "—",
-          "Responsable de l'Activité": lead["Responsable de l'Activité"] ?? "—",
-          "Nom du Responsable": lead["Nom du Responsable"] ?? "—",
-          Priorite: lead["Priorité"] ?? "—",
-          Statut_de_l_Activite: lead["Statut de l'Activité"] ?? "À Faire",
-          Opportunity: lead["Opportunity"] ?? "—",
-          Entreprise: lead["Entreprise (from Opportunity)"] ?? "—",
-          "Nom_de_la_compagnie": lead["Nom de la compagnie"] ?? "—",
-          "Full_Name": lead["Full Name"] ?? "—",
-          "LinkedIn_URL": lead["Contact LinkedIn URL"] ?? "—",
-          "Job_Title": lead["Job Title"] ?? "—",
-          "Mobile_Phone": lead["Mobile Phone"] ?? lead.phones?.[0] ?? "—",
-          "Direct_Phone": lead["Direct Phone"] ?? "—",
-          "Company_Phone": lead["Company Phone"] ?? "—",
-          "Type d'Activité 2.0": lead["Type d'Activité 2.0"] ?? "—",
-          "Message_content": lead["Message content"] ?? "—",
-          "Call_Triggered": lead["Call Triggered"] ?? "—",
-          "Resultat_Appel": lead["Résultat (Appel)"] ?? "—",
-          "Linked_Notes": lead["Linked Notes"] ?? "—",
-          "Date et Heure Rencontre": lead["Notes Rencontres"] ?? "—",
-          "Flow_URL": lead["Flow URL"] ?? "—",
+          Full_Name: (lead["Full Name"] ?? "—").toString().trim(),
+          Job_Title: (lead["Job Title"] ?? "—").toString().trim(),
+          Nom_de_la_compagnie: (lead["Nom de la compagnie"] ?? "—").toString().trim(),
+          LinkedIn_URL: (lead["Contact LinkedIn URL"] ?? "—").toString().trim(),
+          Mobile_Phone: (lead["Mobile Phone"] ?? lead.phones?.[0] ?? "—").toString().trim(),
+          Direct_Phone: (lead["Direct Phone"] ?? "—").toString().trim(),
+          Company_Phone: (lead["Company Phone"] ?? "—").toString().trim(),
+
+          Nom_de_l_Activite: (lead["Nom de l'Activite"] ?? "—").toString().trim(),
+          Priorite: (lead["Priorité"] ?? "—").toString().trim(),
+          Date_et_Heure_Rencontre: (lead["Notes Rencontres"] ?? "—").toString().trim(),
+          Statut_de_l_Activite: (lead["Statut de l'Activité"] ?? "À Faire").toString().trim(),
+          Linked_Notes: (lead["Linked Notes"] ?? "—").toString().trim(),
+          Flow_URL: (lead["Flow URL"] ?? "—").toString().trim(),
+
+          Message_content: (lead["Message content"] ?? "—").toString().trim(),
+          Resultat_Appel: (lead["Résultat (Appel)"] ?? "—").toString().trim(),
         }));
+
 
 
         setRecords(normalized);
@@ -476,7 +471,7 @@ export default function PowerDialer() {
 
 // ─────────── Helpers ───────────
 function Field({ label, value }: { label: string; value: string }) {
-  if (label === "LinkedIn" && value !== "—" && value.includes("linkedin.com")) {
+  if (label === "LinkedIn_URL" && value !== "—" && value.includes("linkedin.com")) {
     return (
       <p className="flex">
         <span className="w-40 shrink-0 font-medium text-zinc-500">{label} :</span>
@@ -486,13 +481,12 @@ function Field({ label, value }: { label: string; value: string }) {
   }
 
 if (
-  (label.includes("Téléphone") || label.includes("Phone")) &&
+  (label.includes("Phone") || label.includes("Téléphone")) &&
   value !== "—" &&
   typeof value === "string"
 ) {
   const digits = value.replace(/\D/g, "");
-
-  let formatted = value.trim(); // fallback
+  let formatted = value.trim();
 
   if (digits.length === 10) {
     formatted = digits.replace(/(\d{3})(\d{3})(\d{4})/, '($1) $2-$3');
@@ -507,6 +501,7 @@ if (
     </p>
   );
 }
+
 
 
   return (
