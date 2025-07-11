@@ -69,9 +69,11 @@ export default function PowerDialer() {
   };
 
   const getFlowSidFromUrl = (url: string): string | null => {
-    const match = url?.match(/\\/Flows\\/([A-Za-z0-9]+)\\/Executions/);
-    return match ? match[1] : null;
+   if (!url || typeof url !== "string") return null;
+   const match = url.match(/\/Flows\/([A-Za-z0-9]+)\/Executions/);
+   return match ? match[1] : null;
   };
+
 
   useEffect(() => {
     const fetchQueue = async () => {
