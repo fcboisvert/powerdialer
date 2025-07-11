@@ -96,27 +96,30 @@ export default function PowerDialer() {
           throw new Error("Invalid queue format");
         }
 
-        const normalized = result.map((lead) => ({
-          id: lead.id,
-          Full_Name: (lead["Full Name"] ?? "—").toString().trim(),
-          Job_Title: (lead["Job Title"] ?? "—").toString().trim(),
-          Nom_de_la_compagnie: (lead["Nom de la compagnie"] ?? "—").toString().trim(),
-          LinkedIn_URL: (lead["Contact LinkedIn URL"] ?? "—").toString().trim(),
-          Mobile_Phone: (lead["Mobile Phone"] ?? lead.phones?.[0] ?? "—").toString().trim(),
-          Direct_Phone: (lead["Direct Phone"] ?? "—").toString().trim(),
-          Company_Phone: (lead["Company Phone"] ?? "—").toString().trim(),
+        const normalized = result.map((lead) => {
+          const f = lead; // if result is already flattened; otherwise use lead.fields if nested
 
-          Nom_de_l_Activite: (lead["Nom de l'Activite"] ?? "—").toString().trim(),
-          Priorite: (lead["Priorité"] ?? "—").toString().trim(),
-          Date_et_Heure_Rencontre: (lead["Notes Rencontres"] ?? "—").toString().trim(),
-          Statut_de_l_Activite: (lead["Statut de l'Activité"] ?? "À Faire").toString().trim(),
-          Linked_Notes: (lead["Linked Notes"] ?? "—").toString().trim(),
-          Flow_URL: (lead["Flow URL"] ?? "—").toString().trim(),
+          return {
+            id: lead.id,
+            Full_Name: f["Full Name"] ?? "—",
+            Job_Title: f["Job Title"] ?? "—",
+            Nom_de_la_compagnie: f["Nom de la compagnie"] ?? "—",
+            LinkedIn_URL: f["Contact LinkedIn URL"] ?? "—",
+            Mobile_Phone: f["Mobile Phone"] ?? f.phones?.[0] ?? "—",
+            Direct_Phone: f["Direct Phone"] ?? "—",
+            Company_Phone: f["Company Phone"] ?? "—",
 
-          Message_content: (lead["Message content"] ?? "—").toString().trim(),
-          Resultat_Appel: (lead["Résultat (Appel)"] ?? "—").toString().trim(),
-        }));
+            Nom_de_l_Activite: f["Nom de l’activité"] ?? "—", // ⚠️ with proper accent
+            Priorite: f["Priorité"] ?? "—", 
+            Date_et_Heure_Rencontre: f["Date et Heure Rencontre"] ?? "—",
+            Statut_de_l_Activite: f["Statut de l'Activité"] ?? "À Faire",
+            Linked_Notes: f["Linked Notes"] ?? "—",
+            Flow_URL: f["Flow URL"] ?? "—",
 
+            Message_content: f["Message content"] ?? "—",
+            Resultat_Appel: f["Résultat (Appel)"] ?? "—",
+          };
+        });
 
 
         setRecords(normalized);
