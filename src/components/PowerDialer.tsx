@@ -485,15 +485,29 @@ function Field({ label, value }: { label: string; value: string }) {
     );
   }
 
-  if ((label.includes("Téléphone") || label.includes("Phone")) && value !== "—") {
-    const formatted = value.replace(/(\d{1})(\d{3})(\d{3})(\d{4})/, '+$1 ($2) $3-$4')
-    return (
-      <p className="flex">
-        <span className="w-40 shrink-0 font-medium text-zinc-500">{label} :</span>
-        <span className="text-zinc-800 font-mono">{formatted}</span>
-      </p>
-    );
+if (
+  (label.includes("Téléphone") || label.includes("Phone")) &&
+  value !== "—" &&
+  typeof value === "string"
+) {
+  const digits = value.replace(/\D/g, "");
+
+  let formatted = value.trim(); // fallback
+
+  if (digits.length === 10) {
+    formatted = digits.replace(/(\d{3})(\d{3})(\d{4})/, '($1) $2-$3');
+  } else if (digits.length === 11 && digits.startsWith("1")) {
+    formatted = digits.replace(/1(\d{3})(\d{3})(\d{4})/, '+1 ($1) $2-$3');
   }
+
+  return (
+    <p className="flex">
+      <span className="w-40 shrink-0 font-medium text-zinc-500">{label} :</span>
+      <span className="text-zinc-800 font-mono">{formatted}</span>
+    </p>
+  );
+}
+
 
   return (
     <p className="flex">
