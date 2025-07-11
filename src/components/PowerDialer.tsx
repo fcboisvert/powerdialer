@@ -8,7 +8,7 @@ import {
   SkipForward,
   Lock,
   Clock,
-  CheckCircle
+  CheckCircle,
 } from "lucide-react";
 import Logo from "/texion-logo.svg";
 
@@ -18,28 +18,42 @@ declare global {
   }
 }
 
-/* ─────────── config ─────────── */
 const QUEUE_API_URL = "https://texion.app/api/queue";
 const AIRTABLE_API_URL = "https://texion.app/api/airtable";
+const TWILIO_TOKEN_URL = "https://almond-mouse-3471.twil.io/token-public";
 
 const AGENT_CALLER_IDS: Record<string, string[]> = {
   "Frédéric-Charles Boisvert": ["+14388178171"],
-  "Simon McConnell": ["+14388178177"]
+  "Simon McConnell": ["+14388178177"],
 };
 
-const getAgent = () => localStorage.getItem("texion_agent") || "Frédéric-Charles Boisvert";
+const AGENT_NAME_MAP: Record<string, string> = {
+  frederic: "Frédéric-Charles Boisvert",
+  simon: "Simon McConnell",
+};
 
-/* ─────────── component ─────────── */
+const getAgentName = () =>
+  AGENT_NAME_MAP[localStorage.getItem("texion_agent") || "frederic"];
+
+const CALL_STATES = {
+  IDLE: "idle",
+  CALLING: "calling",
+  WAITING: "waiting_outcome",
+  CONNECTED: "agent_connected",
+} as const;
+
 export default function PowerDialer() {
   const [records, setRecords] = useState<CallRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState("Chargement des contacts…");
   const [idx, setIdx] = useState(0);
 
-  const agent = getAgent();
-  const [callerId, setCallerId] = useState("");
+  const agent = getAgentName();
+  const [callerId, setCallerId] = useState(AGENT_CALLER_IDS[agent]?.[0] || "");
+  const [callState, setCallState] = useState<
+    keyof typeof CALL_STATES
+  >(CALL_STATES.IDLE);
   const [callActive, setCallActive] = useState(false);
-  const [callState, setCallState] = useState<'idle' | 'calling' | 'waiting_outcome' | 'agent_connected'>('idle');
   const [showForm, setShowForm] = useState(false);
   const [currentCallId, setCurrentCallId] = useState<string | null>(null);
   const [callResult, setCallResult] = useState("");
@@ -47,180 +61,76 @@ export default function PowerDialer() {
 
   const twilioDevice = useRef<any>(null);
   const connection = useRef<any>(null);
+  const current = records[idx];
 
-  /* Listen for call outcome webhooks */
+  const get = (obj: any, key: string, fallback = "—") => {
+    const val = obj?.[key];
+    return Array.isArray(val) ? val[0] || fallback : val || fallback;
+  };
+
+  const getFlowSidFromUrl = (url: string): string | null => {
+    const match = url?.match(/\\/Flows\\/([A-Za-z0-9]+)\\/Executions/);
+    return match ? match[1] : null;
+  };
+
   useEffect(() => {
-    const handleCallOutcome = (event: CustomEvent) => {
-      const { outcome, callId, activity } = event.detail;
-      console.log("Received call outcome:", outcome, callId);
-      
-      if (callId === currentCallId) {
-        if (outcome === "Répondeur" || outcome === "Boite_Vocale") {
-          // Automatic voicemail outcome
-          setCallResult("Boite_Vocale");
-          setCallState('idle');
-          setCallActive(false);
-          updateCallResult("Boite_Vocale", "Message laissé automatiquement");
-          setStatus("📞 Message vocal laissé");
-          setTimeout(() => next(), 2000); // Auto advance after 2 seconds
-        } else if (outcome === "Répondu_Humain") {
-          // Human answered - agent needs to handle the call
-          setCallState('agent_connected');
-          setStatus("👤 Humain répondu - En conversation");
-          setShowForm(true);
-        } else if (outcome === "Pas_Joignable") {
-          // Not reachable
-          setCallResult("Pas_Joignable");
-          setCallState('idle');
-          setCallActive(false);
-          updateCallResult("Pas_Joignable", "Numéro non joignable");
-          setStatus("❌ Pas joignable");
-          setTimeout(() => next(), 2000);
+    const fetchQueue = async () => {
+      setLoading(true);
+      setStatus("Chargement des contacts…");
+
+      try {
+        const res = await fetch(`${QUEUE_API_URL}?agent=${encodeURIComponent(agent)}`);
+        const result = await res.json();
+
+        if (!Array.isArray(result)) {
+          console.error("Bad queue response:", result);
+          throw new Error("Invalid queue format");
         }
+
+        const normalized = result.map((lead) => ({
+          ...lead,
+          Mobile_Phone: lead.Mobile_Phone || lead.phones?.[0] || "—",
+        }));
+
+        setRecords(normalized);
+        setStatus(`✅ ${normalized.length} contact(s) en file d'attente`);
+      } catch (e) {
+        console.error("Queue fetch failed", e);
+        setStatus("⚠️ Erreur API file d'attente");
+        setRecords([]);
+      } finally {
+        setLoading(false);
       }
     };
 
-    window.addEventListener('callOutcome', handleCallOutcome as EventListener);
-    return () => window.removeEventListener('callOutcome', handleCallOutcome as EventListener);
-  }, [currentCallId]);
-
-  /* Update call result to Airtable */
-  const updateCallResult = async (result: string, notes: string) => {
-    try {
-      const current = records[idx];
-      await fetch(`${AIRTABLE_API_URL}/update-result`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          activityName: get(current, "Nom de l'Activite"),
-          result: result,
-          notes: notes,
-          agent: agent
-        })
-      });
-    } catch (error) {
-      console.error("Error updating call result:", error);
-    }
-  };
-
-  /* Normalize Airtable data to expected format */
-  const normalizeAirtableData = (airtableRecord: any) => {
-    const safeVal = (v: any) => Array.isArray(v) ? v[0] : v;
-    
-    return {
-      id: airtableRecord.id,
-      "Nom de l'Activite": safeVal(airtableRecord.opportunity) || "—",
-      "Flow_URL": "—", // Not provided by current API, add if needed
-      "Full_Name": safeVal(airtableRecord.name) || "—",
-      "Mobile_Phone": safeVal(airtableRecord.mobile) || "—",
-      "Job_Title": "—", // Not provided by current API, add if needed
-      "Nom_de_la_compagnie": "—", // Not provided by current API, add if needed
-      "LinkedIn_URL": safeVal(airtableRecord.linkedin) || "—",
-      "Direct_Phone": safeVal(airtableRecord.direct) || "—",
-      "Company_Phone": safeVal(airtableRecord.company) || "—",
-      "Priorite": safeVal(airtableRecord.priority) || "—",
-      "Statut_de_l_Activite": safeVal(airtableRecord.statut) || "À Faire",
-      "Linked_Notes": "—",
-      "Date et Heure Rencontre": "—",
-      "Message_content": "—",
-      "Resultat_Appel": "—"
-    };
-  };
-
-  /* fetch queue from API (live from Airtable) */
-  useEffect(() => {
-    setLoading(true);
-    setStatus("Chargement des contacts…");
-    
-    const url = `${QUEUE_API_URL}?agent=${encodeURIComponent(agent)}`;
-    console.log("Fetching from queue API:", url);
-    
-    fetch(url)
-      .then((r) => r.json())
-      .then((response) => {
-        console.log("Queue API response:", response);
-        
-        let list: any[] = [];
-        
-        if (Array.isArray(response)) {
-          // Normalize Airtable data to expected format
-          list = response.map(normalizeAirtableData);
-          console.log("Normalized records:", list);
-        } else if (response && typeof response === 'object') {
-          // Legacy support: key-value response
-          const rawList = response[agent] || response[agent.toLowerCase()] || response[agent.toUpperCase()] || [];
-          list = rawList.map(normalizeAirtableData);
-        }
-        
-        if (Array.isArray(list) && list.length) {
-          setRecords(list);
-          setStatus(`✅ ${list.length} contact(s) en file d'attente`);
-        } else {
-          setRecords([]);
-          setStatus(`⚠️ File d'attente vide pour ${agent}`);
-        }
-      })
-      .catch((error) => {
-        console.error("Queue API error:", error);
-        setRecords([]);
-        setStatus("⚠️ Erreur API file d'attente");
-      })
-      .finally(() => setLoading(false));
+    fetchQueue();
   }, [agent]);
-
-  /* Update status in Airtable when lead is processed */
-  const markLeadCompleted = async (leadId: string) => {
-    try {
-      await fetch(`${QUEUE_API_URL}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          id: leadId, 
-          status: 'Fait' 
-        })
-      });
-      console.log("Lead marked as completed in Airtable");
-    } catch (error) {
-      console.error("Error updating lead status:", error);
-    }
-  };
-
-  /* caller-ID selection */
   useEffect(() => {
-    const ids = AGENT_CALLER_IDS[agent] || [];
-    if (ids.length) setCallerId(ids[0]);
-  }, [agent]);
-
-  /* init Twilio once */
-  useEffect(() => {
-    if (!window.Twilio) {
-      setStatus("Twilio SDK non chargé !");
-      return;
-    }
+    if (!window.Twilio) return setStatus("Twilio SDK non chargé !");
     let device: any;
+
     (async () => {
-      setStatus("Initialisation Twilio…");
       try {
-        const res = await fetch(
-          `https://almond-mouse-3471.twil.io/token-public?agent=${agent}`
-        );
+        setStatus("Initialisation Twilio…");
+        const res = await fetch(`${TWILIO_TOKEN_URL}?agent=${agent}`);
         const { token } = await res.json();
+
         device = new window.Twilio.Device(token);
         twilioDevice.current = device;
 
         device.on("ready", () => setStatus("Twilio prêt"));
         device.on("connect", () => {
-          setStatus("📞 Appel connecté - En attente du résultat...");
           setCallActive(true);
-          setCallState('waiting_outcome');
+          setCallState(CALL_STATES.WAITING);
+          setStatus("📞 Appel connecté - En attente du résultat...");
         });
         device.on("disconnect", () => {
-          if (callState === 'agent_connected') {
+          if (callState === CALL_STATES.CONNECTED) {
             setStatus("📞 Conversation terminée");
             setShowForm(true);
           } else {
             setStatus("🛑 Appel terminé");
-            setCallState('idle');
+            setCallState(CALL_STATES.IDLE);
           }
           setCallActive(false);
         });
@@ -228,142 +138,157 @@ export default function PowerDialer() {
           setStatus("Erreur Twilio: " + e.message)
         );
       } catch (e: any) {
+        console.error("Twilio init error", e);
         setStatus("Erreur token: " + e.message);
       }
     })();
+
     return () => device && device.destroy();
   }, [agent]);
 
-  /* helpers */
-  const current = records[idx];
-  const get = (obj: any, key: string, d = "—") => {
-    // Handle both array and direct string values
-    if (Array.isArray(obj?.[key])) {
-      return obj[key][0] || d;
+  useEffect(() => {
+    const handler = (event: CustomEvent) => {
+      const { outcome, callId } = event.detail;
+      if (callId !== currentCallId) return;
+
+      const autoAdvance = (result: string, notes: string, msg: string) => {
+        setCallResult(result);
+        setCallState(CALL_STATES.IDLE);
+        setCallActive(false);
+        updateCallResult(result, notes);
+        setStatus(msg);
+        setTimeout(() => next(), 2000);
+      };
+
+      switch (outcome) {
+        case "Répondeur":
+        case "Boite_Vocale":
+          autoAdvance("Boite_Vocale", "Message laissé automatiquement", "📞 Message vocal laissé");
+          break;
+        case "Répondu_Humain":
+          setCallState(CALL_STATES.CONNECTED);
+          setStatus("👤 Humain répondu - En conversation");
+          setShowForm(true);
+          break;
+        case "Pas_Joignable":
+          autoAdvance("Pas_Joignable", "Numéro non joignable", "❌ Pas joignable");
+          break;
+      }
+    };
+
+    window.addEventListener("callOutcome", handler as EventListener);
+    return () => window.removeEventListener("callOutcome", handler as EventListener);
+  }, [currentCallId]);
+
+  const updateCallResult = async (result: string, notes: string) => {
+    try {
+      await fetch(`${AIRTABLE_API_URL}/update-result`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          activityName: get(current, "Nom de l'Activite"),
+          result,
+          notes,
+          agent,
+        }),
+      });
+
+      await fetch(QUEUE_API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: current.id, status: "Fait" }),
+      });
+    } catch (e) {
+      console.error("Airtable update error", e);
     }
-    return obj?.[key] || d;
   };
 
-  // Extract Flow SID from the Flow URL
-  const getFlowSidFromUrl = (flowUrl: string): string | null => {
-    if (!flowUrl || flowUrl === "—") return null;
-    const match = flowUrl.match(/\/Flows\/([A-Za-z0-9]+)\/Executions/);
-    return match ? match[1] : null;
-  };
-
-  /* actions */
   const dial = () => {
     if (!twilioDevice.current) return setStatus("Twilio non initialisé");
-    if (callState !== 'idle') return setStatus("Appel en cours, veuillez patienter");
-    
-    // Try phone numbers in priority order (mobile → direct → company)
-    let num = get(current, "Mobile_Phone");
-    if (num === "—") num = get(current, "Direct_Phone");
-    if (num === "—") num = get(current, "Company_Phone");
-    if (num === "—") return setStatus("Aucun numéro valide !");
+    if (callState !== CALL_STATES.IDLE) return setStatus("Appel en cours…");
+
+    let num = get(current, "Mobile_Phone") || get(current, "Direct_Phone") || get(current, "Company_Phone");
+    if (!num || num === "—") return setStatus("Aucun numéro valide !");
     if (!callerId) return setStatus("Sélectionnez un Caller ID !");
 
-    // Get the Flow URL from the queue data and extract the Flow SID
-    const flowUrl = get(current, "Flow_URL");
-    const flowSid = getFlowSidFromUrl(flowUrl);
-    
-    // Generate unique call ID
     const callId = `call_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const flowSid = getFlowSidFromUrl(get(current, "Flow_URL"));
+
+    setCallState(CALL_STATES.CALLING);
     setCurrentCallId(callId);
-    
-    setCallState('calling');
-    setStatus(`📞 Composition → ${num}${flowSid ? ` (Flow: ${flowSid})` : ''}`);
+    setStatus(`📞 Composition → ${num}${flowSid ? ` (Flow: ${flowSid})` : ""}`);
     setShowForm(false);
     setCallResult("");
     setCallNotes("");
-    
-    const connectionParams: any = {
+
+    const params = {
       To: num,
       From: callerId,
       contact_channel_address: num,
       flow_channel_address: callerId,
-      // Pass activity information to the flow
       activity: get(current, "Nom de l'Activite"),
-      callId: callId,
+      callId,
       leadName: get(current, "Full_Name"),
       company: get(current, "Nom_de_la_compagnie"),
-      agent: agent
+      agent,
+      ...(flowSid && { flowSid }),
     };
 
-    // Add Flow SID if available
-    if (flowSid) {
-      connectionParams.flowSid = flowSid;
-    }
-    
-    connection.current = twilioDevice.current.connect(connectionParams);
+    connection.current = twilioDevice.current.connect(params);
   };
 
-  const simulate = () => {
-    if (callState !== 'idle') return setStatus("Appel en cours, veuillez patienter");
-    
-    setStatus("🎭 Simulation d'appel...");
-    setCallActive(true);
-    setCallState('calling');
+  const hang = () => {
+    twilioDevice.current?.disconnectAll();
+    setCallActive(false);
+    setCallState(CALL_STATES.IDLE);
+    setCurrentCallId(null);
     setShowForm(false);
+    setStatus("📞 Appel raccroché");
+  };
+  const simulate = () => {
+    if (callState !== CALL_STATES.IDLE) return setStatus("Appel en cours…");
+
+    setCallActive(true);
+    setCallState(CALL_STATES.CALLING);
+    setStatus("🎭 Simulation d'appel...");
+    setShowForm(false);
+
     setTimeout(() => {
-      setStatus("📞 Simulation - Boîte vocale");
       setCallActive(false);
-      setCallState('idle');
+      setCallState(CALL_STATES.IDLE);
       setCallResult("Boite_Vocale");
       updateCallResult("Boite_Vocale", "Simulation - Message laissé");
+      setStatus("📞 Simulation - Boîte vocale");
       setTimeout(() => next(), 2000);
     }, 3000);
   };
-  
-  const hang = () => {
-    twilioDevice.current?.disconnectAll();
-    setStatus("📞 Appel raccroché");
-    setCallActive(false);
-    setCallState('idle');
-    setCurrentCallId(null);
-    setShowForm(false);
-  };
-  
+
   const next = () => {
-    if (callState !== 'idle') return setStatus("Terminez l'appel en cours avant de passer au suivant");
-    
-    // Mark current lead as completed in Airtable
-    if (current?.id) {
-      markLeadCompleted(current.id);
-    }
-    
+    if (callState !== CALL_STATES.IDLE) return setStatus("Terminez l'appel en cours");
     setIdx((i) => (i + 1 < records.length ? i + 1 : i));
-    setShowForm(false);
     setCallResult("");
     setCallNotes("");
+    setShowForm(false);
     setCurrentCallId(null);
     setStatus("➡️ Contact suivant");
   };
 
   const saveAndNext = async () => {
     if (!callResult) {
-      setStatus("❌ Veuillez sélectionner un résultat d'appel");
+      setStatus("❌ Sélectionnez un résultat d'appel");
       return;
     }
-    
+
     setStatus("💾 Sauvegarde en cours...");
     await updateCallResult(callResult, callNotes);
-    
-    // Mark lead as completed in Airtable
-    if (current?.id) {
-      await markLeadCompleted(current.id);
-    }
-    
-    setCallState('idle');
+    setCallState(CALL_STATES.IDLE);
     setStatus("✅ Résultat sauvegardé");
     setTimeout(() => next(), 1000);
   };
-  
+
   const logout = () => {
-    if (callState !== 'idle') {
-      if (!confirm("Un appel est en cours. Êtes-vous sûr de vouloir vous déconnecter ?")) {
-        return;
-      }
+    if (callState !== CALL_STATES.IDLE) {
+      if (!confirm("Un appel est en cours. Quitter ?")) return;
     }
     localStorage.removeItem("texion_agent");
     window.location.reload();
@@ -372,38 +297,23 @@ export default function PowerDialer() {
   if (loading) return <p className="p-10 text-center">{status}</p>;
 
   return (
-    <main className="min-h-screen bg-gradient-to-br from-zinc-100 via-white to-zinc-100 flex items-center justify-center p-4">
+    <main className="min-h-screen bg-zinc-100 flex items-center justify-center p-4">
       <section className="w-full max-w-3xl bg-white rounded-xl shadow-xl ring-1 ring-zinc-100 p-10 space-y-8">
-        {/* header */}
         <header className="flex items-center gap-3">
           <img src={Logo} alt="texion" className="w-10 h-auto" />
-          <h1 className="text-lg font-semibold tracking-tight">
-            POWER DIALER TEXION
-          </h1>
+          <h1 className="text-lg font-semibold">POWER DIALER TEXION</h1>
           <span className="ml-auto text-sm font-medium">
-            {idx + 1}/{records.length}&nbsp;– Agent&nbsp;:
-            {agent.split(' ')[0].toUpperCase()}
+            {idx + 1}/{records.length} – Agent: {agent.split(" ")[0].toUpperCase()}
           </span>
         </header>
 
-        {/* Live queue indicator */}
         <div className="flex items-center gap-2 text-sm">
           <span className="inline-block w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
           <span className="font-medium text-green-700">Live depuis Airtable</span>
         </div>
 
-        {/* Flow indicator */}
-        {get(current, "Flow_URL") !== "—" && (
-          <div className="flex items-center gap-2 text-sm">
-            <span className="font-medium">Flow assigné&nbsp;:</span>
-            <span className="text-blue-600 font-mono text-xs">
-              {getFlowSidFromUrl(get(current, "Flow_URL")) || "Non détecté"}
-            </span>
-          </div>
-        )}
-        
         <div className="flex items-center gap-2 text-sm">
-          <span className="font-medium">Numéro sortant&nbsp;:</span>
+          <span className="font-medium">Numéro sortant :</span>
           <select
             className="border rounded px-2 py-1 text-sm"
             value={callerId}
@@ -415,8 +325,7 @@ export default function PowerDialer() {
           </select>
         </div>
 
-        {/* 2-column grid */}
-        <div className="grid md:grid-cols-2 gap-x-12 gap-y-6 text-sm">
+        <div className="grid md:grid-cols-2 gap-6 text-sm">
           <div>
             <h3 className="mb-2 font-semibold text-zinc-800">Infos Prospect</h3>
             <Field label="Nom" value={get(current, "Full_Name")} />
@@ -427,7 +336,6 @@ export default function PowerDialer() {
             <Field label="Téléphone direct" value={get(current, "Direct_Phone")} />
             <Field label="Téléphone entreprise" value={get(current, "Company_Phone")} />
           </div>
-
           <div>
             <h3 className="mb-2 font-semibold text-zinc-800">Infos Activité</h3>
             <Field label="Nom de l'activité" value={get(current, "Nom de l'Activite")} />
@@ -439,71 +347,44 @@ export default function PowerDialer() {
           </div>
         </div>
 
-        {/* status banner with call state indicator */}
         <div className={`rounded-md px-4 py-3 text-sm ring-1 ${
-          callState === 'calling' ? 'bg-blue-50 ring-blue-200 text-blue-800' :
-          callState === 'waiting_outcome' ? 'bg-yellow-50 ring-yellow-200 text-yellow-800' :
-          callState === 'agent_connected' ? 'bg-green-50 ring-green-200 text-green-800' :
-          'bg-zinc-50 ring-zinc-100'
+          callState === CALL_STATES.CALLING
+            ? 'bg-blue-50 ring-blue-200 text-blue-800'
+            : callState === CALL_STATES.WAITING
+            ? 'bg-yellow-50 ring-yellow-200 text-yellow-800'
+            : callState === CALL_STATES.CONNECTED
+            ? 'bg-green-50 ring-green-200 text-green-800'
+            : 'bg-zinc-50 ring-zinc-100'
         }`}>
           <div className="flex items-center gap-2">
-            {callState === 'calling' && <Phone className="w-4 h-4 animate-pulse" />}
-            {callState === 'waiting_outcome' && <Clock className="w-4 h-4 animate-spin" />}
-            {callState === 'agent_connected' && <CheckCircle className="w-4 h-4" />}
-            <span>Statut&nbsp;: {status}</span>
+            {callState === CALL_STATES.CALLING && <Phone className="w-4 h-4 animate-pulse" />}
+            {callState === CALL_STATES.WAITING && <Clock className="w-4 h-4 animate-spin" />}
+            {callState === CALL_STATES.CONNECTED && <CheckCircle className="w-4 h-4" />}
+            <span>Statut : {status}</span>
           </div>
         </div>
 
-        {/* buttons */}
         <div className="flex flex-wrap justify-center gap-3 pt-2">
-          <Action icon={Phone} onClick={dial} disabled={callState !== 'idle'}>
-            Appeler
-          </Action>
-          <Action icon={FlaskConical} onClick={simulate} disabled={callState !== 'idle'}>
-            Simuler
-          </Action>
-          <Action icon={PhoneOff} onClick={hang} disabled={!callActive && callState === 'idle'}>
-            Raccrocher
-          </Action>
-          <Action icon={SkipForward} onClick={next} disabled={callState !== 'idle'}>
-            Suivant
-          </Action>
+          <Action icon={Phone} onClick={dial} disabled={callState !== CALL_STATES.IDLE}>Appeler</Action>
+          <Action icon={FlaskConical} onClick={simulate} disabled={callState !== CALL_STATES.IDLE}>Simuler</Action>
+          <Action icon={PhoneOff} onClick={hang} disabled={!callActive && callState === CALL_STATES.IDLE}>Raccrocher</Action>
+          <Action icon={SkipForward} onClick={next} disabled={callState !== CALL_STATES.IDLE}>Suivant</Action>
           <Action icon={Lock} onClick={logout}>Logout</Action>
         </div>
 
-        {/* result form */}
-        {showForm && callState === 'agent_connected' && (
+        {showForm && callState === CALL_STATES.CONNECTED && (
           <div className="mt-8 rounded-lg bg-zinc-50 ring-1 ring-zinc-100 p-6">
-            <h4 className="font-medium mb-4">📞 Conversation terminée - Saisir le résultat</h4>
-            
-            {/* Show current message content if available */}
+            <h4 className="font-medium mb-4">📞 Conversation terminée - Résultat</h4>
             {get(current, "Message_content") !== "—" && (
               <div className="mb-4 p-3 bg-blue-50 rounded border-l-4 border-blue-200">
-                <p className="text-sm text-blue-800">
-                  <strong>Message préparé:</strong> {get(current, "Message_content")}
-                </p>
+                <p className="text-sm text-blue-800"><strong>Message préparé:</strong> {get(current, "Message_content")}</p>
               </div>
             )}
-
-            {/* Show current result if available */}
-            {get(current, "Resultat_Appel") !== "—" && (
-              <div className="mb-4 p-3 bg-green-50 rounded border-l-4 border-green-200">
-                <p className="text-sm text-green-800">
-                  <strong>Résultat précédent:</strong> {get(current, "Resultat_Appel")}
-                </p>
-              </div>
-            )}
-
-            {/* Form inputs */}
             <div className="space-y-3 mb-4">
               <div>
-                <label className="block text-sm font-medium mb-1">Résultat de l'appel: *</label>
-                <select 
-                  className="w-full border rounded px-3 py-2 text-sm"
-                  value={callResult}
-                  onChange={(e) => setCallResult(e.target.value)}
-                >
-                  <option value="">-- Sélectionner un résultat --</option>
+                <label className="block text-sm font-medium mb-1">Résultat de l'appel *</label>
+                <select className="w-full border rounded px-3 py-2 text-sm" value={callResult} onChange={(e) => setCallResult(e.target.value)}>
+                  <option value="">-- Sélectionner --</option>
                   <option value="S_O">S_O</option>
                   <option value="Rencontre_Expl._Planifiee">Rencontre_Expl._Planifiee</option>
                   <option value="Rencontre_Besoin_Planifiee">Rencontre_Besoin_Planifiee</option>
@@ -521,24 +402,13 @@ export default function PowerDialer() {
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium mb-1">Notes:</label>
-                <textarea 
-                  className="w-full border rounded px-3 py-2 text-sm" 
-                  rows={3}
-                  placeholder="Notes sur l'appel..."
-                  value={callNotes}
-                  onChange={(e) => setCallNotes(e.target.value)}
-                ></textarea>
+                <label className="block text-sm font-medium mb-1">Notes</label>
+                <textarea className="w-full border rounded px-3 py-2 text-sm" rows={3} value={callNotes} onChange={(e) => setCallNotes(e.target.value)}></textarea>
               </div>
             </div>
-
             <div className="flex gap-3">
-              <Button onClick={saveAndNext} disabled={!callResult}>
-                💾 Sauvegarder &amp; Suivant
-              </Button>
-              <Button variant="outline" onClick={hang}>
-                ❌ Annuler l'appel
-              </Button>
+              <Button onClick={saveAndNext} disabled={!callResult}>💾 Sauvegarder & Suivant</Button>
+              <Button variant="outline" onClick={hang}>❌ Annuler l'appel</Button>
             </div>
           </div>
         )}
@@ -547,32 +417,23 @@ export default function PowerDialer() {
   );
 }
 
-/* ─────────── helpers ─────────── */
+// ─────────── Helpers ───────────
 function Field({ label, value }: { label: string; value: string }) {
-  // Handle LinkedIn URLs specifically
   if (label === "LinkedIn" && value !== "—" && value.includes("linkedin.com")) {
     return (
       <p className="flex">
         <span className="w-40 shrink-0 font-medium text-zinc-500">{label} :</span>
-        <a 
-          href={value} 
-          target="_blank" 
-          rel="noopener noreferrer"
-          className="text-blue-600 hover:text-blue-800 underline"
-        >
-          Voir profil LinkedIn
-        </a>
+        <a href={value} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-800 underline">Voir profil LinkedIn</a>
       </p>
     );
   }
 
-  // Handle phone numbers - format them nicely
   if ((label.includes("Téléphone") || label.includes("Phone")) && value !== "—") {
-    const formattedPhone = value.replace(/(\d{1})(\d{3})(\d{3})(\d{4})/, '+$1 ($2) $3-$4');
+    const formatted = value.replace(/(\\d{1})(\\d{3})(\\d{3})(\\d{4})/, '+$1 ($2) $3-$4');
     return (
       <p className="flex">
         <span className="w-40 shrink-0 font-medium text-zinc-500">{label} :</span>
-        <span className="text-zinc-800 font-mono">{formattedPhone}</span>
+        <span className="text-zinc-800 font-mono">{formatted}</span>
       </p>
     );
   }
