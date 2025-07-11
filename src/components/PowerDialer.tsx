@@ -343,7 +343,7 @@ export default function PowerDialer() {
             <Field label="Fonction" value={get(current, "Job_Title")} />
             <Field label="Entreprise" value={get(current, "Nom_de_la_compagnie")} />
             <Field label="LinkedIn" value={get(current, "LinkedIn_URL")} />
-            <Field label="Téléphone mobile" value={get(current, "Mobile_Phone")} />
+            <Field label="Téléphone mobile" value={get(current, "Mobile_Phone")} /> 
             <Field label="Téléphone direct" value={get(current, "Direct_Phone")} />
             <Field label="Téléphone entreprise" value={get(current, "Company_Phone")} />
           </div>

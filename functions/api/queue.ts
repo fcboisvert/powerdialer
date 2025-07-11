@@ -140,7 +140,14 @@ function mapAirtableRecord(rec: AirtableRecord) {
     Mobile_Phone: safe("Mobile Phone"),
     Direct_Phone: safe("Direct Phone"),
     Company_Phone: safe("Company Phone"),
-    Nom_de_l_Activite: safe("Nom de l'Activite"),
+    // Handles every spelling / apostrophe variant used in Airtable
+    Nom_de_l_Activite:
+      safe("Nom de l’Activité")   ||   // smart apostrophe, capital A
+      safe("Nom de l’activité")   ||   // smart apostrophe, lower-case a
+      safe("Nom de l'activité")   ||   // straight apostrophe, lower-case a
+      safe("Nom de l'Activité")   ||   // straight apostrophe, capital A
+      safe("Nom de l'Activite"),
+
     Priorite: safe("Priorité"),
     Date_et_Heure_Rencontre: safe("Notes Rencontres"),
     Statut_de_l_Activite: safe("Statut de l'Activité"),
@@ -155,6 +162,6 @@ function mapAirtableRecord(rec: AirtableRecord) {
     "Nom du Responsable": safe("Nom du Responsable"),
     Entreprise: safe("Entreprise (from Opportunity)"),
     "Type d'Activité 2.0": safe("Type d'Activité 2.0"),
-    Call_Triggered: safe("Call Triggered"),
+    Call_Triggered: safe("Call Triggered"), 
   };
 }
