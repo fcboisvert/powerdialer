@@ -1,7 +1,7 @@
 /**
  * Cloudflare Pages Function: Airtable Call Queue API (Agent-facing)
- * GET  /api/queue?agent=Frédéric-Charles Boisvert   → fetches queue from Airtable view
- * POST /api/queue   { id, status }                  → patches call status in Airtable
+ * GET  /api/queue?agent=Frédéric-Charles Boisvert → fetches queue from Airtable view
+ * POST /api/queue { id, status }                  → patches call status in Airtable
  */
 
 interface Env {
@@ -10,14 +10,23 @@ interface Env {
   AIRTABLE_TABLE: string;
 }
 
-const FIELD_STATUS = "Statut de l'Activité";
-const FIELD_AGENT = "Responsable de l'Activité";
-const FIELD_PRIORITY = "Priorité";
-const FIELD_MOBILE = "Mobile Phone";
-const FIELD_DIRECT = "Direct Phone";
-const FIELD_COMPANY = "Company Phone";
+// ─────────── Constants ─────────── //
+const CORS_HEADERS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type",
+};
 
-// Map agent to view names
+const FIELD_KEYS = {
+  fullName: "Full Name",
+  priority: "Priorité",
+  mobile: "Mobile Phone",
+  direct: "Direct Phone",
+  company: "Company Phone",
+  status: "Statut de l'Activité",
+  agent: "Responsable de l'Activité",
+};
+
 const VIEW_MAP: Record<string, string> = {
   "Simon McConnell": "To Call View - simon",
   "Frédéric-Charles Boisvert": "To Call View - frederic",
@@ -28,140 +37,126 @@ type AirtableRecord = {
   fields: Record<string, any>;
 };
 
-export const onRequest: PagesFunction<Env> = async (ctx) => {
-  const { request, env } = ctx;
+// ─────────── Handler ─────────── //
+export const onRequest: PagesFunction<Env> = async ({ request, env }) => {
   const url = new URL(request.url);
+  const method = request.method;
 
-  // Standard CORS headers
-  const corsHeaders = {
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type",
-  };
+  if (method === "OPTIONS") return new Response(null, { status: 204, headers: CORS_HEADERS });
 
-  // Handle CORS preflight
-  if (request.method === "OPTIONS")
-    return new Response(null, { status: 204, headers: corsHeaders });
-
-  // GET: Pull live queue for agent from Airtable
-  if (request.method === "GET") {
+  if (method === "GET") {
     const agent = url.searchParams.get("agent");
-    if (!agent)
-      return resp({ error: "Missing 'agent' query parameter" }, 400, corsHeaders);
+    if (!agent || !VIEW_MAP[agent]) {
+      return respond({ error: "Invalid or missing 'agent'" }, 400);
+    }
 
     const view = VIEW_MAP[agent];
-    if (!view)
-      return resp({ error: "Unknown agent or missing view mapping" }, 400, corsHeaders);
-
-    const apiUrl = `https://api.airtable.com/v0/${env.AIRTABLE_BASE}/${encodeURIComponent(
-      env.AIRTABLE_TABLE
-    )}?view=${encodeURIComponent(view)}&sort[0][field]=${encodeURIComponent(
-      FIELD_PRIORITY
-    )}&sort[0][direction]=asc`;
+    const baseUrl = `https://api.airtable.com/v0/${env.AIRTABLE_BASE}/${encodeURIComponent(env.AIRTABLE_TABLE)}`;
+    const query = `?view=${encodeURIComponent(view)}&sort[0][field]=${encodeURIComponent(FIELD_KEYS.priority)}&sort[0][direction]=asc`;
 
     try {
-      const records = await fetchAllAirtable(apiUrl, env.AIRTABLE_TOKEN);
-
-      // Map fields: always return phone fallback array and useful info
-      const leads = records.map((rec) => ({
-        id: rec.id,
-        name: rec.fields["Full Name"] ?? "",
-        phones: [
-          rec.fields[FIELD_MOBILE] ?? null,
-          rec.fields[FIELD_DIRECT] ?? null,
-          rec.fields[FIELD_COMPANY] ?? null,
-        ].filter(Boolean),
-        mobile: rec.fields[FIELD_MOBILE] ?? null,
-        direct: rec.fields[FIELD_DIRECT] ?? null,
-        company: rec.fields[FIELD_COMPANY] ?? null,
-        priority: rec.fields[FIELD_PRIORITY] ?? null,
-        opportunity: rec.fields["Opportunity"] ?? "",
-        statut: rec.fields[FIELD_STATUS] ?? "",
-        agent: rec.fields[FIELD_AGENT] ?? "",
-        linkedin: rec.fields["Contact LinkedIn URL"] ?? "",
-      }));
-
-      return resp(leads, 200, corsHeaders);
+      const records = await fetchAllAirtable(`${baseUrl}${query}`, env.AIRTABLE_TOKEN);
+      const leads = records.map(mapAirtableRecord);
+      return respond(leads, 200);
     } catch (err) {
-      console.error("Airtable fetch error:", err);
-      return resp({ error: "Failed to fetch queue from Airtable" }, 502, corsHeaders);
+      console.error("Airtable GET error:", err);
+      return respond({ error: "Failed to fetch queue" }, 502);
     }
   }
 
-  // POST: Update lead status in Airtable
-  if (request.method === "POST") {
+  if (method === "POST") {
     let body: any;
     try {
       body = await request.json();
     } catch {
-      return resp({ error: "Invalid JSON in request body" }, 400, corsHeaders);
+      return respond({ error: "Invalid JSON in body" }, 400);
     }
-    const { id, status } = body;
-    if (!id || !status)
-      return resp({ error: "id and status required" }, 400, corsHeaders);
 
-    const patchUrl = `https://api.airtable.com/v0/${env.AIRTABLE_BASE}/${encodeURIComponent(
-      env.AIRTABLE_TABLE
-    )}`;
+    const { id, status } = body;
+    if (!id || !status) return respond({ error: "'id' and 'status' required" }, 400);
 
     try {
+      const patchUrl = `https://api.airtable.com/v0/${env.AIRTABLE_BASE}/${encodeURIComponent(env.AIRTABLE_TABLE)}`;
+      const patchBody = {
+        records: [{ id, fields: { [FIELD_KEYS.status]: status } }],
+      };
+
       const res = await fetch(patchUrl, {
         method: "PATCH",
         headers: {
           Authorization: `Bearer ${env.AIRTABLE_TOKEN}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          records: [
-            {
-              id,
-              fields: {
-                [FIELD_STATUS]: status,
-              },
-            },
-          ],
-        }),
+        body: JSON.stringify(patchBody),
       });
 
       if (!res.ok) {
-        const err = await res.text();
-        return resp({ error: "Airtable update failed", details: err }, res.status, corsHeaders);
+        const details = await res.text();
+        return respond({ error: "Airtable update failed", details }, res.status);
       }
 
-      return resp({ ok: true }, 200, corsHeaders);
+      return respond({ ok: true }, 200);
     } catch (err) {
-      console.error("Airtable patch error:", err);
-      return resp({ error: "Failed to update lead in Airtable" }, 502, corsHeaders);
+      console.error("Airtable PATCH error:", err);
+      return respond({ error: "Failed to update lead" }, 502);
     }
   }
 
-  return resp({ error: "Method Not Allowed" }, 405, corsHeaders);
+  return respond({ error: "Method Not Allowed" }, 405);
 };
 
-// Helpers
-function resp(data: any, status: number, headers: Record<string, string>) {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: { "Content-Type": "application/json", ...headers },
-  });
-}
+// ─────────── Utilities ─────────── //
 
-// Handles  Airtable pagination (up to thousands of records)
-async function fetchAllAirtable(
-  baseUrl: string,
-  token: string
-): Promise<AirtableRecord[]> {
+const respond = (data: any, status: number): Response =>
+  new Response(JSON.stringify(data), {
+    status,
+    headers: { "Content-Type": "application/json", ...CORS_HEADERS },
+  });
+
+async function fetchAllAirtable(baseUrl: string, token: string): Promise<AirtableRecord[]> {
   let records: AirtableRecord[] = [];
   let offset: string | undefined;
+
   do {
     const url = offset ? `${baseUrl}&offset=${offset}` : baseUrl;
-    const res = await fetch(url, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    if (!res.ok) throw new Error("Airtable fetch failed");
+    const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+    if (!res.ok) throw new Error(`Airtable fetch failed with status ${res.status}`);
     const json = await res.json();
-    records = records.concat(json.records);
+    records = records.concat(json.records || []);
     offset = json.offset;
   } while (offset);
+
   return records;
+}
+
+function mapAirtableRecord(rec: AirtableRecord) {
+  const f = rec.fields;
+  return {
+    id: rec.id,
+    Full_Name: f["Full Name"] ?? "",
+    phones: [f["Mobile Phone"], f["Direct Phone"], f["Company Phone"]].filter(Boolean),
+    Mobile_Phone: f["Mobile Phone"] ?? null,
+    Direct_Phone: f["Direct Phone"] ?? null,
+    Company_Phone: f["Company Phone"] ?? null,
+    Job_Title: f["Job Title"] ?? "",
+    Nom_de_la_compagnie: f["Nom de la compagnie"] ?? "",
+    LinkedIn_URL: f["Contact LinkedIn URL"] ?? "",
+    "Nom de l'Activite": f["Nom de l’Activité"] ?? "",
+    Priorite: f["Priorité"] ?? null,
+    Statut_de_l_Activite: f["Statut de l'Activité"] ?? "",
+    Linked_Notes: f["Linked Notes"] ?? "",
+    Rencontres: f["Rencontres"] ?? "",
+    Opportunity: f["Opportunity"] ?? "",
+    "Activité 2.0": f["Activité 2.0"] ?? "",
+    "Activité 2.0 H.C.": f["Activité 2.0 H.C."] ?? "",
+    "Responsable de l'Activité": f["Responsable de l'Activité"] ?? "",
+    "Nom du Responsable": f["Nom du Responsable"] ?? "",
+    Entreprise: f["Entreprise (from Opportunity)"] ?? "",
+    "Type d'Activité 2.0": f["Type d'Activité 2.0"] ?? "",
+    Message_content: f["Message content"] ?? "",
+    Call_Triggered: f["Call Triggered"] ?? "",
+    Resultat_Appel: f["Résultat (Appel)"] ?? "",
+    "Date et Heure Rencontre": f["Date et Heure Rencontre"] ?? "",
+    Flow_URL: f["Flow URL"] ?? "",
+  };
 }
