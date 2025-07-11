@@ -23,11 +23,11 @@ const QUEUE_API_URL = "https://texion.app/api/queue";
 const AIRTABLE_API_URL = "https://texion.app/api/airtable";
 
 const AGENT_CALLER_IDS: Record<string, string[]> = {
-  frederic: ["+14388178171"],
-  simon: ["+14388178177"]
+  "Frédéric-Charles Boisvert": ["+14388178171"],
+  "Simon McConnell": ["+14388178177"]
 };
 
-const getAgent = () => localStorage.getItem("texion_agent") || "frederic";
+const getAgent = () => localStorage.getItem("texion_agent") || "Frédéric-Charles Boisvert";
 
 /* ─────────── component ─────────── */
 export default function PowerDialer() {
@@ -103,86 +103,87 @@ export default function PowerDialer() {
     }
   };
 
-  /* fetch queue from API */
+  /* Normalize Airtable data to expected format */
+  const normalizeAirtableData = (airtableRecord: any) => {
+    const safeVal = (v: any) => Array.isArray(v) ? v[0] : v;
+    
+    return {
+      id: airtableRecord.id,
+      "Nom de l'Activite": safeVal(airtableRecord.opportunity) || "—",
+      "Flow_URL": "—", // Not provided by current API, add if needed
+      "Full_Name": safeVal(airtableRecord.name) || "—",
+      "Mobile_Phone": safeVal(airtableRecord.mobile) || "—",
+      "Job_Title": "—", // Not provided by current API, add if needed
+      "Nom_de_la_compagnie": "—", // Not provided by current API, add if needed
+      "LinkedIn_URL": safeVal(airtableRecord.linkedin) || "—",
+      "Direct_Phone": safeVal(airtableRecord.direct) || "—",
+      "Company_Phone": safeVal(airtableRecord.company) || "—",
+      "Priorite": safeVal(airtableRecord.priority) || "—",
+      "Statut_de_l_Activite": safeVal(airtableRecord.statut) || "À Faire",
+      "Linked_Notes": "—",
+      "Date et Heure Rencontre": "—",
+      "Message_content": "—",
+      "Resultat_Appel": "—"
+    };
+  };
+
+  /* fetch queue from API (live from Airtable) */
   useEffect(() => {
+    setLoading(true);
+    setStatus("Chargement des contacts…");
+    
     const url = `${QUEUE_API_URL}?agent=${encodeURIComponent(agent)}`;
-    console.log("Fetching from queue API:", url); // Debug log
+    console.log("Fetching from queue API:", url);
     
     fetch(url)
       .then((r) => r.json())
       .then((response) => {
-        console.log("Queue API response:", response); // Debug log
-        console.log("Agent being requested:", agent); // Debug log
-        console.log("Response type:", typeof response); // Debug log
-        console.log("Is array:", Array.isArray(response)); // Debug log
+        console.log("Queue API response:", response);
         
-        // Handle the response from your queue API
         let list: any[] = [];
         
         if (Array.isArray(response)) {
-          // Direct array response
-          list = response;
-          console.log("Using direct array, length:", list.length);
+          // Normalize Airtable data to expected format
+          list = response.map(normalizeAirtableData);
+          console.log("Normalized records:", list);
         } else if (response && typeof response === 'object') {
-          // Key-value response where agent name is the key
-          console.log("Object keys:", Object.keys(response));
-          list = response[agent] || response[agent.toLowerCase()] || response[agent.toUpperCase()] || [];
-          console.log("Using key-value, agent key:", agent, "list length:", list.length);
+          // Legacy support: key-value response
+          const rawList = response[agent] || response[agent.toLowerCase()] || response[agent.toUpperCase()] || [];
+          list = rawList.map(normalizeAirtableData);
         }
         
         if (Array.isArray(list) && list.length) {
-          console.log("Setting records:", list);
           setRecords(list);
           setStatus(`✅ ${list.length} contact(s) en file d'attente`);
         } else {
-          console.log("No data in queue, using test data");
-          setRecords([
-            {
-              "Nom de l'Activite": "SPARK Microsystems-Jean-Sebastien Poirier-T2-0.3 Cold Call 1",
-              "Flow_URL": "https://studio.twilio.com/v2/Flows/FW236e663e008973ab36cbfcdc706b6d97/Executions",
-              "Full_Name": "Jean-Sebastien Poirier",
-              "Mobile_Phone": "15148060649",
-              "Job_Title": "Director of Operations and Quality",
-              "Nom_de_la_compagnie": "SPARK Microsystems",
-              "LinkedIn_URL": "https://www.linkedin.com/in/ACwAAB99-_wBx7uE2Au4xf9ALpUwH_EeWTa8ifU",
-              "Direct_Phone": "438-375-3990",
-              "Company_Phone": "438-375-3990",
-              "Priorite": "2",
-              "Statut_de_l_Activite": "À Faire",
-              "Linked_Notes": "",
-              "Date et Heure Rencontre": "",
-              "Message_content": "",
-              "Resultat_Appel": ""
-            } as any
-          ]);
-          setStatus(`⚠️ File d'attente vide pour ${agent} - Mode test`);
+          setRecords([]);
+          setStatus(`⚠️ File d'attente vide pour ${agent}`);
         }
       })
       .catch((error) => {
-        console.error("Queue API error:", error); // Debug log
-        setRecords([
-          {
-            "Nom de l'Activite": "SPARK Microsystems-Jean-Sebastien Poirier-T2-0.3 Cold Call 1",
-            "Flow_URL": "https://studio.twilio.com/v2/Flows/FW236e663e008973ab36cbfcdc706b6d97/Executions",
-            "Full_Name": "Jean-Sebastien Poirier",
-            "Mobile_Phone": "15148060649",
-            "Job_Title": "Director of Operations and Quality",
-            "Nom_de_la_compagnie": "SPARK Microsystems",
-            "LinkedIn_URL": "https://www.linkedin.com/in/ACwAAB99-_wBx7uE2Au4xf9ALpUwH_EeWTa8ifU",
-            "Direct_Phone": "438-375-3990",
-            "Company_Phone": "438-375-3990",
-            "Priorite": "2",
-            "Statut_de_l_Activite": "À Faire",
-            "Linked_Notes": "",
-            "Date et Heure Rencontre": "",
-            "Message_content": "",
-            "Resultat_Appel": ""
-          } as any
-        ]);
-        setStatus("⚠️ Erreur API file d'attente - Mode test");
+        console.error("Queue API error:", error);
+        setRecords([]);
+        setStatus("⚠️ Erreur API file d'attente");
       })
       .finally(() => setLoading(false));
   }, [agent]);
+
+  /* Update status in Airtable when lead is processed */
+  const markLeadCompleted = async (leadId: string) => {
+    try {
+      await fetch(`${QUEUE_API_URL}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          id: leadId, 
+          status: 'Fait' 
+        })
+      });
+      console.log("Lead marked as completed in Airtable");
+    } catch (error) {
+      console.error("Error updating lead status:", error);
+    }
+  };
 
   /* caller-ID selection */
   useEffect(() => {
@@ -250,13 +251,12 @@ export default function PowerDialer() {
     return match ? match[1] : null;
   };
 
-
-
   /* actions */
   const dial = () => {
     if (!twilioDevice.current) return setStatus("Twilio non initialisé");
     if (callState !== 'idle') return setStatus("Appel en cours, veuillez patienter");
     
+    // Try phone numbers in priority order (mobile → direct → company)
     let num = get(current, "Mobile_Phone");
     if (num === "—") num = get(current, "Direct_Phone");
     if (num === "—") num = get(current, "Company_Phone");
@@ -327,6 +327,11 @@ export default function PowerDialer() {
   const next = () => {
     if (callState !== 'idle') return setStatus("Terminez l'appel en cours avant de passer au suivant");
     
+    // Mark current lead as completed in Airtable
+    if (current?.id) {
+      markLeadCompleted(current.id);
+    }
+    
     setIdx((i) => (i + 1 < records.length ? i + 1 : i));
     setShowForm(false);
     setCallResult("");
@@ -343,6 +348,12 @@ export default function PowerDialer() {
     
     setStatus("💾 Sauvegarde en cours...");
     await updateCallResult(callResult, callNotes);
+    
+    // Mark lead as completed in Airtable
+    if (current?.id) {
+      await markLeadCompleted(current.id);
+    }
+    
     setCallState('idle');
     setStatus("✅ Résultat sauvegardé");
     setTimeout(() => next(), 1000);
@@ -371,9 +382,15 @@ export default function PowerDialer() {
           </h1>
           <span className="ml-auto text-sm font-medium">
             {idx + 1}/{records.length}&nbsp;– Agent&nbsp;:
-            {agent.toUpperCase()}
+            {agent.split(' ')[0].toUpperCase()}
           </span>
         </header>
+
+        {/* Live queue indicator */}
+        <div className="flex items-center gap-2 text-sm">
+          <span className="inline-block w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+          <span className="font-medium text-green-700">Live depuis Airtable</span>
+        </div>
 
         {/* Flow indicator */}
         {get(current, "Flow_URL") !== "—" && (
@@ -384,6 +401,7 @@ export default function PowerDialer() {
             </span>
           </div>
         )}
+        
         <div className="flex items-center gap-2 text-sm">
           <span className="font-medium">Numéro sortant&nbsp;:</span>
           <select
@@ -396,8 +414,6 @@ export default function PowerDialer() {
             ))}
           </select>
         </div>
-
-
 
         {/* 2-column grid */}
         <div className="grid md:grid-cols-2 gap-x-12 gap-y-6 text-sm">
