@@ -96,34 +96,10 @@ export default function PowerDialer() {
           throw new Error("Invalid queue format");
         }
 
-        const normalized = result.map((lead) => {
-          const f = lead; // if result is already flattened; otherwise use lead.fields if nested
-
-          return {
-            id: lead.id,
-            Full_Name: f["Full Name"] ?? "—",
-            Job_Title: f["Job Title"] ?? "—",
-            Nom_de_la_compagnie: f["Nom de la compagnie"] ?? "—",
-            LinkedIn_URL: f["Contact LinkedIn URL"] ?? "—",
-            Mobile_Phone: f["Mobile Phone"] ?? f.phones?.[0] ?? "—",
-            Direct_Phone: f["Direct Phone"] ?? "—",
-            Company_Phone: f["Company Phone"] ?? "—",
-
-            Nom_de_l_Activite: f["Nom de l’activité"] ?? "—", // ⚠️ with proper accent
-            Priorite: f["Priorité"] ?? "—", 
-            Date_et_Heure_Rencontre: f["Date et Heure Rencontre"] ?? "—",
-            Statut_de_l_Activite: f["Statut de l'Activité"] ?? "À Faire",
-            Linked_Notes: f["Linked Notes"] ?? "—",
-            Flow_URL: f["Flow URL"] ?? "—",
-
-            Message_content: f["Message content"] ?? "—",
-            Resultat_Appel: f["Résultat (Appel)"] ?? "—",
-          };
-        });
+        setRecords(result as CallRecord[]);
+        setStatus(`✅ ${result.length} contact(s) en file d'attente`);
 
 
-        setRecords(normalized);
-        setStatus(`✅ ${normalized.length} contact(s) en file d'attente`);
       } catch (e) {
         console.error("Queue fetch failed", e);
         setStatus("⚠️ Erreur API file d'attente");
@@ -216,14 +192,8 @@ export default function PowerDialer() {
       await fetch(`${AIRTABLE_API_URL}/update-result`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          activityName: get(current, "Nom de l'Activite"),
-          result,
-          notes: callNotes,
-          meetingNotes,
-          meetingDatetime,
-          agent,
-        }),
+          notes,                     // use the function argument
+
       });
 
     await fetch(QUEUE_API_URL, {
@@ -260,7 +230,7 @@ export default function PowerDialer() {
       From: callerId,
       contact_channel_address: num,
       flow_channel_address: callerId,
-      activity: get(current, "Nom de l'Activite"),
+      activity:  get(current, "Nom_de_l_Activite"),
       callId,
       leadName: get(current, "Full_Name"),
       company: get(current, "Nom_de_la_compagnie"),
@@ -333,6 +303,9 @@ export default function PowerDialer() {
   };
 
   if (loading) return <p className="p-10 text-center">{status}</p>;
+  if (records.length === 0)
+  return <p className="p-10 text-center">Aucun contact à appeler 👍</p>;
+
 
   return (
     <main className="min-h-screen bg-zinc-100 flex items-center justify-center p-4">
@@ -375,12 +348,12 @@ export default function PowerDialer() {
             <Field label="Téléphone entreprise" value={get(current, "Company_Phone")} />
           </div>
           <div>
-            <Field label="Nom_de_l_Activite" value={get(current, "Nom_de_l_Activite")} />
-            <Field label="Priorite" value={get(current, "Priorite")} />
-            <Field label="Date_et_Heure_Rencontre" value={get(current, "Date_et_Heure_Rencontre")} />
-            <Field label="Statut_de_l_Activite" value={get(current, "Statut_de_l_Activite", "À Faire")} />
-            <Field label="Linked_Notes" value={get(current, "Linked_Notes")} />
-            <Field label="Flow_URL" value={get(current, "Flow_URL") !== "—" ? "✅ Oui" : "❌ Non"} />
+            <Field label="Nom de l’activité" value={get(current, "Nom_de_l_Activite")} />
+            <Field label="Priorité"           value={get(current, "Priorite")} />
+            <Field label="Date / Heure"       value={get(current, "Date_et_Heure_Rencontre")} />
+            <Field label="Statut"             value={get(current, "Statut_de_l_Activite", "À Faire")} />
+            <Field label="Notes liées"        value={get(current, "Linked_Notes")} />
+            <Field label="Flow URL"           value={get(current, "Flow_URL") !== "—" ? "✅ Oui" : "❌ Non"} />
           </div>
         </div>
 
