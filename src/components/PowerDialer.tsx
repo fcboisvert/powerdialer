@@ -32,9 +32,6 @@ const AGENT_NAME_MAP: Record<string, string> = {
   simon: "Simon McConnell",
 };
 
-const getAgentName = () =>
-  AGENT_NAME_MAP[localStorage.getItem("texion_agent") || "frederic"];
-
 const CALL_STATES = {
   IDLE: "idle",
   CALLING: "calling",
@@ -65,8 +62,11 @@ export default function PowerDialer() {
   const [currentCallId, setCurrentCallId] = useState<string | null>(null);
   const [callResult, setCallResult] = useState("");
   const [callNotes, setCallNotes] = useState("");
+  const [meetingNotes, setMeetingNotes] = useState("");
+  const [meetingDatetime, setMeetingDatetime] = useState("");
 
-  const twilioDevice = useRef<any>(null);
+
+  const twilioDevice = useRef<null | any>(null); // or stricter: Twilio.Device
   const connection = useRef<any>(null);
   const current = records[idx];
 
@@ -97,9 +97,32 @@ export default function PowerDialer() {
         }
 
         const normalized = result.map((lead) => ({
-          ...lead,
-          Mobile_Phone: lead.Mobile_Phone || lead.phones?.[0] || "—",
+          id: lead.id,
+          "Nom de l'Activite": lead["Nom de l'Activite"] ?? "—",
+          "Activité 2.0": lead["Activité 2.0"] ?? "—",
+          "Activité 2.0 H.C.": lead["Activité 2.0 H.C."] ?? "—",
+          "Responsable de l'Activité": lead["Responsable de l'Activité"] ?? "—",
+          "Nom du Responsable": lead["Nom du Responsable"] ?? "—",
+          Priorite: lead["Priorité"] ?? "—",
+          Statut_de_l_Activite: lead["Statut de l'Activité"] ?? "À Faire",
+          Opportunity: lead["Opportunity"] ?? "—",
+          Entreprise: lead["Entreprise (from Opportunity)"] ?? "—",
+          "Nom_de_la_compagnie": lead["Nom de la compagnie"] ?? "—",
+          "Full_Name": lead["Full Name"] ?? "—",
+          "LinkedIn_URL": lead["Contact LinkedIn URL"] ?? "—",
+          "Job_Title": lead["Job Title"] ?? "—",
+          "Mobile_Phone": lead["Mobile Phone"] ?? lead.phones?.[0] ?? "—",
+          "Direct_Phone": lead["Direct Phone"] ?? "—",
+          "Company_Phone": lead["Company Phone"] ?? "—",
+          "Type d'Activité 2.0": lead["Type d'Activité 2.0"] ?? "—",
+          "Message_content": lead["Message content"] ?? "—",
+          "Call_Triggered": lead["Call Triggered"] ?? "—",
+          "Resultat_Appel": lead["Résultat (Appel)"] ?? "—",
+          "Linked_Notes": lead["Linked Notes"] ?? "—",
+          "Date et Heure Rencontre": lead["Notes Rencontres"] ?? "—",
+          "Flow_URL": lead["Flow URL"] ?? "—",
         }));
+
 
         setRecords(normalized);
         setStatus(`✅ ${normalized.length} contact(s) en file d'attente`);
@@ -198,20 +221,23 @@ export default function PowerDialer() {
         body: JSON.stringify({
           activityName: get(current, "Nom de l'Activite"),
           result,
-          notes,
+          notes: callNotes,
+          meetingNotes,
+          meetingDatetime,
           agent,
         }),
       });
 
-      await fetch(QUEUE_API_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: current.id, status: "Fait" }),
-      });
-    } catch (e) {
-      console.error("Airtable update error", e);
-    }
-  };
+    await fetch(QUEUE_API_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: current.id, status: "Fait" }),
+    });
+  } catch (e) {
+    console.error("Airtable update error", e);
+  }
+};
+
 
   const dial = () => {
     if (!twilioDevice.current) return setStatus("Twilio non initialisé");
@@ -278,6 +304,8 @@ export default function PowerDialer() {
     setIdx((i) => (i + 1 < records.length ? i + 1 : i));
     setCallResult("");
     setCallNotes("");
+    setMeetingNotes("");
+    setMeetingDatetime("");
     setShowForm(false);
     setCurrentCallId(null);
     setStatus("➡️ Contact suivant");
@@ -291,6 +319,8 @@ export default function PowerDialer() {
 
     setStatus("💾 Sauvegarde en cours...");
     await updateCallResult(callResult, callNotes);
+    setMeetingNotes("");
+    setMeetingDatetime("");
     setCallState(CALL_STATES.IDLE);
     setStatus("✅ Résultat sauvegardé");
     setTimeout(() => next(), 1000);
@@ -412,9 +442,26 @@ export default function PowerDialer() {
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium mb-1">Notes</label>
-                <textarea className="w-full border rounded px-3 py-2 text-sm" rows={3} value={callNotes} onChange={(e) => setCallNotes(e.target.value)}></textarea>
-              </div>
+               <label className="block text-sm font-medium mb-1">Notes Rencontres</label>
+               <textarea
+                className="w-full border rounded px-3 py-2 text-sm"
+                rows={4}
+                placeholder="Détails à se rappeler de l'appel…"
+                value={meetingNotes}
+                onChange={(e) => setMeetingNotes(e.target.value)}
+              ></textarea>
+            </div>
+
+<div>
+  <label className="block text-sm font-medium mb-1">Date et Heure Rencontre (si applicable)</label>
+  <input
+    type="datetime-local"
+    className="w-full border rounded px-3 py-2 text-sm"
+    value={meetingDatetime}
+    onChange={(e) => setMeetingDatetime(e.target.value)}
+  />
+</div>
+
             </div>
             <div className="flex gap-3">
               <Button onClick={saveAndNext} disabled={!callResult}>💾 Sauvegarder & Suivant</Button>
@@ -439,7 +486,7 @@ function Field({ label, value }: { label: string; value: string }) {
   }
 
   if ((label.includes("Téléphone") || label.includes("Phone")) && value !== "—") {
-    const formatted = value.replace(/(\\d{1})(\\d{3})(\\d{3})(\\d{4})/, '+$1 ($2) $3-$4');
+    const formatted = value.replace(/(\d{1})(\d{3})(\d{3})(\d{4})/, '+$1 ($2) $3-$4')
     return (
       <p className="flex">
         <span className="w-40 shrink-0 font-medium text-zinc-500">{label} :</span>
