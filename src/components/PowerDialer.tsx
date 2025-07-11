@@ -192,9 +192,16 @@ export default function PowerDialer() {
       await fetch(`${AIRTABLE_API_URL}/update-result`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-          notes,                     // use the function argument
+        body: JSON.stringify({
+          activityName: get(current, "Nom_de_l_Activite"),
+          result,
+          notes,             // function argument, not the state variable
+          meetingNotes,
+          meetingDatetime,
+          agent,
+        }),
+        });
 
-      });
 
     await fetch(QUEUE_API_URL, {
       method: "POST",
@@ -446,7 +453,12 @@ export default function PowerDialer() {
 
 // ─────────── Helpers ───────────
 function Field({ label, value }: { label: string; value: string }) {
-  if (label === "LinkedIn_URL" && value !== "—" && value.includes("linkedin.com")) {
+  if (
+  (label === "LinkedIn" || label === "LinkedIn_URL") &&
+  value !== "—" &&
+  value.includes("linkedin.com")
+) {
+
     return (
       <p className="flex">
         <span className="w-40 shrink-0 font-medium text-zinc-500">{label} :</span>
