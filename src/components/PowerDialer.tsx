@@ -48,7 +48,14 @@ export default function PowerDialer() {
   const [status, setStatus] = useState("Chargement des contacts…");
   const [idx, setIdx] = useState(0);
 
-  const agent = getAgentName();
+  const getAgentKey = () =>
+  localStorage.getItem("texion_agent")?.toLowerCase() === "simon"
+    ? "simon"
+    : "frederic"; // fallback to 'frederic' if unset or unknown
+
+   const agentKey = getAgentKey(); // e.g. "frederic"
+   const agent = AGENT_NAME_MAP[agentKey]; // e.g. "Frédéric-Charles Boisvert"
+
   const [callerId, setCallerId] = useState(AGENT_CALLER_IDS[agent]?.[0] || "");
   const [callState, setCallState] = useState<
     keyof typeof CALL_STATES
@@ -114,8 +121,9 @@ export default function PowerDialer() {
     (async () => {
       try {
         setStatus("Initialisation Twilio…");
-        const res = await fetch(`${TWILIO_TOKEN_URL}?agent=${agent}`);
+        cconst res = await fetch(`${TWILIO_TOKEN_URL}?identity=${agentKey}`);
         const { token } = await res.json();
+
 
         device = new window.Twilio.Device(token);
         twilioDevice.current = device;
