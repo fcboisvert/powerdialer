@@ -363,22 +363,22 @@ export default function PowerDialer() {
         <div className="grid md:grid-cols-2 gap-6 text-sm">
           <div>
             <h3 className="mb-2 font-semibold text-zinc-800">Infos Prospect</h3>
-            <Field label="Nom" value={get(current, "Full_Name")} />
-            <Field label="Fonction" value={get(current, "Job_Title")} />
-            <Field label="Entreprise" value={get(current, "Nom_de_la_compagnie")} />
-            <Field label="LinkedIn" value={get(current, "LinkedIn_URL")} />
-            <Field label="Téléphone mobile" value={get(current, "Mobile_Phone")} />
-            <Field label="Téléphone direct" value={get(current, "Direct_Phone")} />
-            <Field label="Téléphone entreprise" value={get(current, "Company_Phone")} />
+            <Field label="Full_Name" value={get(current, "Full_Name")} />
+            <Field label="Job_Title" value={get(current, "Job_Title")} />
+            <Field label="Nom_de_la_compagnie" value={get(current, "Nom_de_la_compagnie")} />
+            <Field label="LinkedIn_URL" value={get(current, "LinkedIn_URL")} />
+            <Field label="Mobile_Phone" value={get(current, "Mobile_Phone")} />
+            <Field label="Direct_Phone" value={get(current, "Direct_Phone")} />
+            <Field label="Company_Phone" value={get(current, "Company_Phone")} />
           </div>
           <div>
-            <h3 className="mb-2 font-semibold text-zinc-800">Infos Activité</h3>
-            <Field label="Nom de l'activité" value={get(current, "Nom de l'Activite")} />
-            <Field label="Priorité" value={get(current, "Priorite")} />
-            <Field label="Date et heure" value={get(current, "Date et Heure Rencontre")} />
-            <Field label="Statut" value={get(current, "Statut_de_l_Activite", "À Faire")} />
-            <Field label="Notes liées" value={get(current, "Linked_Notes")} />
-            <Field label="Flow configuré" value={get(current, "Flow_URL") !== "—" ? "✅ Oui" : "❌ Non"} />
+            <Field label="Nom_de_l_Activite" value={get(current, "Nom_de_l_Activite")} />
+            <Field label="Priorite" value={get(current, "Priorite")} />
+            <Field label="Date_et_Heure_Rencontre" value={get(current, "Date_et_Heure_Rencontre")} />
+            <Field label="Statut_de_l_Activite" value={get(current, "Statut_de_l_Activite")} />
+            <Field label="Linked_Notes" value={get(current, "Linked_Notes")} />
+            <Field label="Flow_URL" value={get(current, "Flow_URL") !== "—" ? "✅ Oui" : "❌ Non"} />
+
           </div>
         </div>
 
