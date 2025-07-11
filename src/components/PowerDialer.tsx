@@ -121,7 +121,7 @@ export default function PowerDialer() {
     (async () => {
       try {
         setStatus("Initialisation Twilio…");
-        cconst res = await fetch(`${TWILIO_TOKEN_URL}?identity=${agentKey}`);
+        const res = await fetch(`${TWILIO_TOKEN_URL}?identity=${agentKey}`);
         const { token } = await res.json();
 
 
