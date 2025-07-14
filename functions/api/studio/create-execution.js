@@ -4,11 +4,11 @@
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, Accept",
+  "Access-Control-Allow-Headers": "*", // wildcard so every header passes pre‑flight
   "Access-Control-Max-Age": "86400",
 };
 
-/* ---------- OPTIONS (pre-flight) ---------- */
+/* ---------- OPTIONS (pre‑flight) ---------- */
 export const onRequestOptions = () =>
   new Response(null, { status: 200, headers: corsHeaders });
 
@@ -31,13 +31,12 @@ export async function onRequestPost({ request, env }) {
 
   /* Credentials ------------------------------------------------- */
   const { TWILIO_ACCOUNT_SID: sid, TWILIO_AUTH_TOKEN: token } = env;
-  if (!sid || !token) {
+  if (!sid || !token)
     return bad("Missing Twilio credentials", "MISSING_CREDENTIALS", 500);
-  }
 
-  /* Phone number quick sanity (E.164) --------------------------- */
-  const re = /^\+\d{8,15}$/;
-  if (!re.test(to) || !re.test(from))
+  /* Phone number sanity (E.164) -------------------------------- */
+  const e164 = /^\+\d{8,15}$/;
+  if (!e164.test(to) || !e164.test(from))
     return bad("Phone numbers must be E.164 (+15551234567)", "INVALID_PHONE");
 
   /* Call Twilio Studio ----------------------------------------- */
@@ -48,10 +47,8 @@ export async function onRequestPost({ request, env }) {
     Parameters: JSON.stringify(parameters || {}),
   }).toString();
 
-  // 👇 DEBUG: log exactly which Flow is being called
-  console.log(
-    `➡️  Calling Twilio: https://studio.twilio.com/v2/Flows/${flowSid}/Executions for ${to}`
-  );
+  // 👇 Visible in wrangler tail so you can verify the exact Flow URL.
+  console.log(`➡️  Calling Twilio: https://studio.twilio.com/v2/Flows/${flowSid}/Executions for ${to}`);
 
   const twilio = await fetch(
     `https://studio.twilio.com/v2/Flows/${flowSid}/Executions`,
@@ -62,23 +59,24 @@ export async function onRequestPost({ request, env }) {
         "Content-Type": "application/x-www-form-urlencoded",
       },
       body: encoded,
-    }
+    },
   );
 
   if (!twilio.ok) {
     const err = await twilio.text();
-    return bad(`Twilio API ${twilio.status}`, "TWILIO_API_ERROR", 502);
+    return bad(`Twilio API ${twilio.status}: ${err}`, "TWILIO_API_ERROR", 502);
   }
 
   const exec = await twilio.json();
   return json(
     {
       success: true,
+      flowSid,              // echo back so the frontend can show it
       executionSid: exec.sid,
       status: exec.status,
-      flowSid, // echo back which flow was used
+      contactChannelAddress: exec.contact_channel_address,
     },
-    201
+    201,
   );
 }
 
