@@ -1,6 +1,7 @@
 // Cloudflare Pages Function – create a Twilio Studio Flow execution
 // ---------------------------------------------------------------
-
+// Always use CC1 – Powerdialer Outbound
+const FORCED_FLOW_SID = "FW236e663e008973ab36cbfcdc706b6d97";
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
@@ -25,9 +26,9 @@ export async function onRequestPost({ request, env }) {
     return bad("Body must be valid JSON", "BAD_JSON");
   }
 
-  const { flowSid, to, from, parameters } = body || {};
-  if (!flowSid || !to || !from)
-    return bad("flowSid, to and from are required", "VALIDATION_ERROR");
+  const { to, from, parameters } = body || {};
+   if (!to || !from)
+    return bad("to and from are required", "VALIDATION_ERROR");
 
   /* Credentials ------------------------------------------------- */
   const { TWILIO_ACCOUNT_SID: sid, TWILIO_AUTH_TOKEN: token } = env;
@@ -51,7 +52,7 @@ export async function onRequestPost({ request, env }) {
   console.log(`➡️  Calling Twilio: https://studio.twilio.com/v2/Flows/${flowSid}/Executions for ${to}`);
 
   const twilio = await fetch(
-    `https://studio.twilio.com/v2/Flows/${flowSid}/Executions`,
+    `https://studio.twilio.com/v2/Flows/${FORCED_FLOW_SID}/Executions`,
     {
       method: "POST",
       headers: {
@@ -69,15 +70,9 @@ export async function onRequestPost({ request, env }) {
 
   const exec = await twilio.json();
   return json(
-    {
-      success: true,
-      flowSid,              // echo back so the frontend can show it
-      executionSid: exec.sid,
-      status: exec.status,
-      contactChannelAddress: exec.contact_channel_address,
-    },
-    201,
-  );
+-    { success: true, executionSid: exec.sid, status: exec.status, flowSid },
+-    201,
+-  );
 }
 
 /* ---------- helper ---------- */
