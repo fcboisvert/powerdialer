@@ -31,7 +31,9 @@ export async function onRequestPost({ request, env }) {
 
   /* Credentials ------------------------------------------------- */
   const { TWILIO_ACCOUNT_SID: sid, TWILIO_AUTH_TOKEN: token } = env;
-  if (!sid || !token) return bad("Missing Twilio credentials", "MISSING_CREDENTIALS", 500);
+  if (!sid || !token) {
+    return bad("Missing Twilio credentials", "MISSING_CREDENTIALS", 500);
+  }
 
   /* Phone number quick sanity (E.164) --------------------------- */
   const re = /^\+\d{8,15}$/;
@@ -46,6 +48,11 @@ export async function onRequestPost({ request, env }) {
     Parameters: JSON.stringify(parameters || {}),
   }).toString();
 
+  // 👇 DEBUG: log exactly which Flow is being called
+  console.log(
+    `➡️  Calling Twilio: https://studio.twilio.com/v2/Flows/${flowSid}/Executions for ${to}`
+  );
+
   const twilio = await fetch(
     `https://studio.twilio.com/v2/Flows/${flowSid}/Executions`,
     {
@@ -55,7 +62,7 @@ export async function onRequestPost({ request, env }) {
         "Content-Type": "application/x-www-form-urlencoded",
       },
       body: encoded,
-    },
+    }
   );
 
   if (!twilio.ok) {
@@ -65,8 +72,13 @@ export async function onRequestPost({ request, env }) {
 
   const exec = await twilio.json();
   return json(
-    { success: true, executionSid: exec.sid, status: exec.status, flowSid },
-    201,
+    {
+      success: true,
+      executionSid: exec.sid,
+      status: exec.status,
+      flowSid, // echo back which flow was used
+    },
+    201
   );
 }
 
@@ -77,4 +89,3 @@ function json(data, status = 200) {
     headers: { "Content-Type": "application/json", ...corsHeaders },
   });
 }
-
