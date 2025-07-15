@@ -1,4 +1,4 @@
-// functions/api/call-outcome.ts
+// C:\Users\Frédéric-CharlesBois\projects\Powerdialer\functions\api\call-outcome.ts
 /**
  * POST /call-outcome
  * Receives call outcomes from Twilio Studio Flow
@@ -15,8 +15,8 @@
 
 interface CallOutcomePayload {
   outcome: 'Répondu_Humain' | 'Répondeur' | 'Pas_Joignable';
-  number?: string;
-  activity?: string;
+  number: string;
+  activity: string;
   callId: string;
   agent: string;
 }
@@ -25,14 +25,12 @@ export const onRequest: PagesFunction<{ OUTCOMES_KV: KVNamespace }> = async (ctx
   const kv = ctx.env.OUTCOMES_KV;
   const { request } = ctx;
   
-  // Add CORS headers for browser requests
   const corsHeaders = {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type',
   };
 
-  // Handle preflight requests
   if (request.method === 'OPTIONS') {
     return new Response(null, { status: 200, headers: corsHeaders });
   }
@@ -115,25 +113,16 @@ export const onRequest: PagesFunction<{ OUTCOMES_KV: KVNamespace }> = async (ctx
       await kv.put(
         `outcome_${payload.callId}`, 
         JSON.stringify(outcomeData), 
-        { expirationTtl: 86400 } // 24 hours for scalability
+        { expirationTtl: 86400 } // 24 hours
       );
 
       // Also store in agent's recent outcomes list
       const agentKey = `recent_outcomes_${payload.agent.toLowerCase()}`;
-      let recentOutcomes: any[] = [];
       const existingOutcomes = await kv.get(agentKey);
-      
-      if (existingOutcomes) {
-        try {
-          recentOutcomes = JSON.parse(existingOutcomes);
-        } catch (e) {
-          recentOutcomes = [];
-        }
-      }
+      let recentOutcomes = existingOutcomes ? JSON.parse(existingOutcomes) : [];
 
-      // Add new outcome and keep only last 50 for scalability
       recentOutcomes.unshift(outcomeData);
-      recentOutcomes = recentOutcomes.slice(0, 50);
+      recentOutcomes = recentOutcomes.slice(0, 10);
 
       await kv.put(
         agentKey,
@@ -141,7 +130,6 @@ export const onRequest: PagesFunction<{ OUTCOMES_KV: KVNamespace }> = async (ctx
         { expirationTtl: 86400 } // 24 hours
       );
 
-      // Log for debugging
       console.log(`Stored outcome for agent ${payload.agent}: ${payload.outcome}`);
 
       return new Response(
