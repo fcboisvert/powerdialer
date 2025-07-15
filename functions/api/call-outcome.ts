@@ -1,20 +1,10 @@
 /// <reference types="@cloudflare/workers-types" />
-import type { PagesFunction, KVNamespace } from '@cloudflare/workers-types';
-// functions/api/call-outcome.ts
-// Updated: maps valid outcomes to Airtable-friendly values, patches Airtable automatically,
-// and returns a 200 response that PowerDialer can trust.
-// -----------------------------------------------------------------------------
-// POST /call-outcome
-// Expected body:
-// {
-//   "outcome": "Répondu_Humain" | "Répondeur" | "Pas_Joignable",
-//   "number" : "+15141234567",
-//   "activity" : "T2-0.3 Cold Call 1",
-//   "activityName": "TEXION - …",
-//   "callId" : "uuid",
-//   "agent"  : "frederic"
-// }
-// -----------------------------------------------------------------------------
+import type { KVNamespace } from '@cloudflare/workers-types';
+import { mapRawOutcomeToCallResult } from '@/utils/mapOutcome';
+
+interface Env {
+  OUTCOMES_KV: KVNamespace;
+}
 
 interface CallOutcomePayload {
   outcome: 'Répondu_Humain' | 'Répondeur' | 'Pas_Joignable';
@@ -25,12 +15,10 @@ interface CallOutcomePayload {
   agent: string;
 }
 
-export const onRequest: PagesFunction<{ OUTCOMES_KV: KVNamespace }> = async (
-  ctx,
-) => {
+export const onRequest: PagesFunction<Env> = async (ctx) => {
   const kv = ctx.env.OUTCOMES_KV;
   const { request } = ctx;
-
+  
   // --- CORS -----------------------------------------------------------
   const corsHeaders = {
     'Access-Control-Allow-Origin': '*',
@@ -41,13 +29,14 @@ export const onRequest: PagesFunction<{ OUTCOMES_KV: KVNamespace }> = async (
   if (request.method === 'OPTIONS') {
     return new Response(null, { status: 200, headers: corsHeaders });
   }
+
   if (request.method !== 'POST') {
     return new Response(
       JSON.stringify({ error: 'Method Not Allowed' }),
-      { status: 405, headers: { 'content-type': 'application/json', ...corsHeaders } },
+      { status: 405, headers: { 'content-type': 'application/json', ...corsHeaders } }
     );
   }
-
+  
   // --- Parse + validate payload --------------------------------------
   let payload: CallOutcomePayload;
   try {
@@ -55,52 +44,54 @@ export const onRequest: PagesFunction<{ OUTCOMES_KV: KVNamespace }> = async (
   } catch (_) {
     return new Response(
       JSON.stringify({ error: 'Invalid JSON in request body' }),
-      { status: 400, headers: { 'content-type': 'application/json', ...corsHeaders } },
+      { status: 400, headers: { 'content-type': 'application/json', ...corsHeaders } }
     );
   }
 
   const { outcome, callId, agent } = payload;
+  const validOutcomes = ['Répondu_Humain', 'Répondeur', 'Pas_Joignable'] as const;
+
   if (!outcome || !callId || !agent) {
     return new Response(
       JSON.stringify({ error: 'Missing required fields: outcome, callId, agent' }),
-      { status: 400, headers: { 'content-type': 'application/json', ...corsHeaders } },
+      { status: 400, headers: { 'content-type': 'application/json', ...corsHeaders } }
     );
   }
 
-  const validOutcomes = ['Répondu_Humain', 'Répondeur', 'Pas_Joignable'] as const;
+  // --- Parse + validate payload --------------------------------------
   if (!validOutcomes.includes(outcome)) {
     return new Response(
       JSON.stringify({ error: `Invalid outcome. Must be one of: ${validOutcomes.join(', ')}` }),
-      { status: 400, headers: { 'content-type': 'application/json', ...corsHeaders } },
+      { status: 400, headers: { 'content-type': 'application/json', ...corsHeaders } }
     );
   }
+
   const existingOutcome = await kv.get(`outcome_${callId}`);
   if (existingOutcome) {
-    return new Response(JSON.stringify({ success: true, message: 'Outcome already recorded' }), {
-      status: 200,
-      headers: { 'content-type': 'application/json', ...corsHeaders },
-    });
+    return new Response(
+      JSON.stringify({ success: true, message: 'Outcome already recorded' }),
+      { status: 200, headers: { 'content-type': 'application/json', ...corsHeaders } }
+    );
   }
-  // --- Persist outcome to KV (24h TTL) -------------------------------
-  const outcomeData = { ...payload, timestamp: new Date().toISOString(), processed: false };
-  await kv.put(`outcome_${callId}`, JSON.stringify(outcomeData), { expirationTtl: 86_400 });
 
+  const outcomeData = { ...payload, timestamp: new Date().toISOString(), processed: false };
+  await kv.put(`outcome_${callId}`, JSON.stringify(outcomeData), { expirationTtl: 86400 });
+  
   // keep last 10 outcomes per agent for quick lookup
   const agentKey = `recent_outcomes_${agent.toLowerCase()}`;
   const existing = await kv.get(agentKey);
   const recent = existing ? (JSON.parse(existing) as typeof outcomeData[]) : [];
   recent.unshift(outcomeData);
-  await kv.put(agentKey, JSON.stringify(recent.slice(0, 10)), { expirationTtl: 86_400 });
+  await kv.put(agentKey, JSON.stringify(recent.slice(0, 10)), { expirationTtl: 86400 });
 
-  // --- Map outcome for Airtable --------------------------------------
-  const AT_OUTCOME_MAP: Record<CallOutcomePayload['outcome'], 'Répondu_Humain' | 'Boite_Vocale' | 'Pas_Joignable'> = {
-    Répondu_Humain: 'Répondu_Humain',
-    Répondeur: 'Boite_Vocale',
-    Pas_Joignable: 'Pas_Joignable',
-  };
-  const airtableResult = AT_OUTCOME_MAP[outcome];
+  const airtableResult = mapRawOutcomeToCallResult(outcome);
+  if (!airtableResult) {
+    return new Response(
+      JSON.stringify({ success: true, message: 'Outcome ignored (manual result expected)' }),
+      { status: 200, headers: { 'content-type': 'application/json', ...corsHeaders } }
+    );
+  }
 
-  // Patch Airtable only for voicemail or not‑reachable; human replies handled manually.
   if (['Répondeur', 'Pas_Joignable'].includes(outcome)) {
     const res = await fetch('https://texion.app/api/airtable/update-result', {
       method: 'POST',
@@ -125,7 +116,12 @@ export const onRequest: PagesFunction<{ OUTCOMES_KV: KVNamespace }> = async (
 
   // --- Success response ----------------------------------------------
   return new Response(
-    JSON.stringify({ success: true, message: 'Call outcome recorded successfully', callId, outcome }),
-    { status: 200, headers: { 'content-type': 'application/json', ...corsHeaders } },
+    JSON.stringify({
+      success: true,
+      message: 'Call outcome recorded successfully',
+      callId,
+      outcome,
+    }),
+    { status: 200, headers: { 'content-type': 'application/json', ...corsHeaders } }
   );
 };
