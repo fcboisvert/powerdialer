@@ -6,6 +6,11 @@
 // 3. startPollingOutcome(callId) helper
 // 4. clearPollingOutcome() helper called from hang, save, next
 // -----------------------------------------------------------------------------
+import {
+  initTwilioDevice,
+  getTwilioDevice,
+  destroyTwilioDevice,
+} from "@/lib/voiceClient";
 import { mapRawOutcomeToCallResult } from "@/utils/mapOutcome";
 import type { RawOutcome } from "@/types/dialer";
 import React, { useEffect, useState, useRef } from "react";
@@ -51,11 +56,11 @@ const CALL_STATES = {
   ERROR: "error",
 } as const;
 
+
 export default function PowerDialer() {
   const navigate = useNavigate();
   // >>> ref to store interval id so we can clear it
   const pollRef = useRef<NodeJS.Timeout | null>(null);
-
   // === STATE ===
   const [records, setRecords] = useState<CallRecord[]>([]);
   const [loading, setLoading] = useState(true);
@@ -78,6 +83,18 @@ export default function PowerDialer() {
   const current = records[idx] ?? {};
   const get = (obj: any, key: string, fb = "—") => Array.isArray(obj?.[key]) ? obj[key][0] ?? fb : obj?.[key] ?? fb;
 
+async function getTwilioAccessToken(identity: string): Promise<string | null> {
+  try {
+    const res = await fetch(`/api/generate-access-token?identity=${identity}`);
+    if (!res.ok) throw new Error("Failed to fetch Twilio token");
+    const data: { token: string } = await res.json();
+    return data.token;
+  } catch (err: any) {
+    console.error("Token error:", err);
+    setStatus("❌ Échec de l'obtention du token Twilio");
+    return null;
+  }
+}
   // ------------------------------------------------------------------
   // Helper to start polling KV for outcome until we get it or timeout
   // ------------------------------------------------------------------
@@ -115,8 +132,16 @@ const startPollingOutcome = (callId: string) => {
         }
 
         setShowForm(true);
+        // Auto-submit if outcome is auto-resolved (Boite_Vocale or Pas_Joignable)
+        if (mapped && ["Boite_Vocale", "Pas_Joignable"].includes(mapped)) {
+          setTimeout(() => {
+            const saveBtn = document.querySelector("button[type='submit']") as HTMLButtonElement;
+            if (saveBtn) saveBtn.click();
+          }, 200); // wait a bit for form to render
+        }
+
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error("Polling error:", err);
     }
   }, 4000);
@@ -133,24 +158,34 @@ const clearPollingOutcome = () => {
   // Fetch queue
   // ------------------------------------------------------------------
   useEffect(() => {
-    (async () => {
-      setLoading(true);
-      setStatus("Chargement des contacts…");
+    const fetchQueue = async () => {
       try {
-        const res = await fetch(`${QUEUE_API_URL}?agent=${encodeURIComponent(agent)}`);
-        const list = await res.json();
-        if (!Array.isArray(list)) throw new Error("Invalid queue format");
-        setRecords(list);
-        setStatus(`✅ ${list.length} contact(s) en file d'attente`);
-      } catch (err) {
-        console.error(err);
-        setStatus("⚠️ Erreur API file d'attente");
-        setRecords([]);
-      } finally {
+        const res = await fetch(QUEUE_API_URL);
+        if (!res.ok) throw new Error("Failed to fetch queue");
+        const data: CallRecord[] = await res.json();
+        setRecords(data);
+        setLoading(false);
+        setStatus("Contacts chargés");
+      } catch (err: any) {
+        console.error("Queue fetch error:", err);
+        setStatus("Erreur de chargement des contacts");
         setLoading(false);
       }
-    })();
-  }, [agent]);
+    };
+    fetchQueue();
+  }, []);
+
+  useEffect(() => {
+  const setupTwilioDevice = async () => {
+    const token = await getTwilioAccessToken(agentKey);
+    if (token) {
+      initTwilioDevice(token);
+    }
+  };
+
+  setupTwilioDevice();
+}, [agentKey]);
+
 
   // === LOGIC FUNCTIONS ===
   const dial = async () => {
@@ -159,28 +194,35 @@ const clearPollingOutcome = () => {
       return;
     }
     const raw =
-      get(current, "Mobile_Phone") ||
-      get(current, "Direct_Phone") ||
-      get(current, "Company_Phone");
-    if (!raw || raw === "—") return setStatus("Aucun numéro valide !");
-    if (!callerId) return setStatus("Sélectionnez un Caller ID !");
-    const digits = raw.replace(/\D/g, "");
-    const to =
-      digits.length === 10
-        ? `+1${digits}`
-        : digits.length === 11 && digits.startsWith("1")
-        ? `+${digits}`
-        : raw.startsWith("+")
-        ? raw
-        : null;
-    if (!to || !/^\+\d{10,15}$/.test(to)) {
-      setStatus("Numéro de destination invalide !");
-      return;
-    }
-    if (!/^\+\d{10,15}$/.test(callerId)) {
-      setStatus("Numéro sortant invalide !");
-      return;
-    }
+  get(current, "Mobile_Phone") ||
+  get(current, "Direct_Phone") ||
+  get(current, "Company_Phone");
+
+if (!raw || raw === "—") return setStatus("Aucun numéro valide !");
+const digits = raw.replace(/\D/g, "");
+const to =
+  digits.length === 10
+    ? `+1${digits}`
+    : digits.length === 11 && digits.startsWith("1")
+    ? `+${digits}`
+    : raw.startsWith("+")
+    ? raw
+    : null;
+const device = getTwilioDevice();
+if (device?.isBusy) {
+  setStatus("📞 Un appel est déjà en cours");
+  return;
+}
+if (!to || !/^\+\d{10,15}$/.test(to)) {
+  setStatus("Numéro de destination invalide !");
+  return;
+}
+
+device?.connect({ params: { To: to } });
+
+
+
+
     setCallState(CALL_STATES.TRIGGERING_FLOW);
     setStatus(`🚀 Déclenchement du flow pour ${to}…`);
     setShowForm(false);
@@ -232,10 +274,11 @@ const clearPollingOutcome = () => {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ flowSid: FLOW_SID, executionSid: currentExecutionSid }),
         });
-      } catch (error) {
-        setStatus(`❌ Erreur lors de l'arrêt : ${error instanceof Error ? error.message : String(error)}`);
+      } catch (error: any) {
+        setStatus(`❌ Erreur lors de l'arrêt : ${error.message}`);
       }
     }
+    getTwilioDevice()?.disconnectAll();
     clearPollingOutcome();
     setCurrentExecutionSid(null);
     setCallState(CALL_STATES.IDLE);
@@ -291,7 +334,11 @@ const clearPollingOutcome = () => {
     setMeetingDatetime("");
     setCallState(CALL_STATES.IDLE);
     setStatus("✅ Résultat sauvegardé");
-    setTimeout(() => next(), 1000);
+    setTimeout(() => {
+      const callBtn = document.querySelector("button:has(svg.lucide-phone)") as HTMLButtonElement;
+      if (callBtn) callBtn.click();
+    }, 1000);
+
   };
 
   async function updateCallResult(
@@ -356,6 +403,7 @@ const clearPollingOutcome = () => {
     clearPollingOutcome();
     localStorage.removeItem("texion_agent");
     setTimeout(() => { navigate("/", { replace: true }); }, 100);
+    destroyTwilioDevice();
   };
 
   // === UI RENDER ===
@@ -564,4 +612,3 @@ function Action({
     </Button>
   );
 }
-

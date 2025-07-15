@@ -1,9 +1,10 @@
 {
   "compilerOptions": {
     /* Target + module */
+    "esModuleInterop": true,
+    "moduleResolution": "node",
     "target": "ES2020",
     "module": "ESNext",
-    "moduleResolution": "bundler",
 
     /* Library + JSX */
     "lib": ["ES2020", "DOM", "DOM.Iterable"],
@@ -27,11 +28,10 @@
     "baseUrl": ".",
     "paths": { "@/*": ["./src/*"] },
 
-    /* Give TS access to Vite + Node + Cloudflare globals */
+    /* Global types */
     "types": ["vite/client", "node", "@cloudflare/workers-types"]
   },
 
   /* Include both frontend and Cloudflare function code */
   "include": ["src", "functions"]
 }
-

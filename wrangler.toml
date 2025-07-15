@@ -1,7 +1,11 @@
-name = "powerdialer-worker"
-compatibility_date = "2025-07-10"
+# wrangler.toml — PowerDialer (Pages + Functions)
 
-[vars]
-AIRTABLE_BASE = "apprTpOIFRuckIZJz"
+name                 = "powerdialer-worker"   # worker name (ignored by Pages, but fine to keep)
+compatibility_date   = "2025-07-15"
+compatibility_flags  = ["nodejs_compat"]      # polyfill Node core modules for Twilio SDK
+pages_build_output_dir = "./dist"             # Vite build output
+
+[vars]                                     # runtime env vars for your Functions
+AIRTABLE_BASE  = "apprTpOIFRuckIZJz"
 AIRTABLE_TABLE = "Interaction / Activities"
-# Do NOT add AIRTABLE_TOKEN here; you set it as a secret already.
+# AIRTABLE_TOKEN stays a secret; don’t hard-code it here
