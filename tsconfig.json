@@ -27,8 +27,11 @@
     "baseUrl": ".",
     "paths": { "@/*": ["./src/*"] },
 
-    /* Give TS access to Vite + Node globals */
-    "types": ["vite/client", "node"]
+    /* Give TS access to Vite + Node + Cloudflare globals */
+    "types": ["vite/client", "node", "@cloudflare/workers-types"]
   },
-  "include": ["src/**/*"]
+
+  /* Include both frontend and Cloudflare function code */
+  "include": ["src", "functions"]
 }
+

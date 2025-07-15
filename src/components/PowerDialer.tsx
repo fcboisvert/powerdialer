@@ -23,6 +23,22 @@ import Logo from "/texion-logo.svg";
 import ResultForm from "@/components/dialer/ResultForm";
 import { useNavigate } from "react-router-dom";
 
+type CallResult =
+  | "S_O"
+  | "Rencontre_Expl._Planifiee"
+  | "Rencontre_Besoin_Planifiee"
+  | "Visite_Planifiee"
+  | "Offre_Planifiee"
+  | "Touchbase_Planifiee"
+  | "Relancer_Dans_X"
+  | "Info_Par_Courriel"
+  | "Boite_Vocale"
+  | "Pas_Joignable"
+  | "Pas_Interesse"
+  | "Demande_Lien_Booking"
+  | "Me_Refere_Interne"
+  | "Me_Refere_Externe";
+
 // === CONSTANTS ===
 const STUDIO_API_URL = "https://texion.app/api/studio";
 const FLOW_SID = "FW52d9007999380cfbb435838d0733e84c";
@@ -68,7 +84,7 @@ export default function PowerDialer() {
   const [callState, setCallState] = useState<(typeof CALL_STATES)[keyof typeof CALL_STATES]>(CALL_STATES.IDLE);
   const [showForm, setShowForm] = useState(false);
   const [currentExecutionSid, setCurrentExecutionSid] = useState<string | null>(null);
-  const [callResult, setCallResult] = useState("");
+  const [callResult, setCallResult] = useState<CallResult>("S_O");
   const [callNotes, setCallNotes] = useState("");
   const [meetingNotes, setMeetingNotes] = useState("");
   const [meetingDatetime, setMeetingDatetime] = useState("");
@@ -92,7 +108,13 @@ export default function PowerDialer() {
         const data = await res.json();
         if (data?.outcome) {
           clearInterval(pollRef.current!);
-          const mapped = data.outcome === "Répondeur" ? "Boite_Vocale" : data.outcome;
+          const OUTCOME_MAP: Record<string, string> = {
+            Répondeur: "Boite_Vocale",
+              Pas_Joignable: "Pas_Joignable",
+          };
+
+          const mapped = OUTCOME_MAP[data.outcome] ?? "S_O"; // fallback default
+
           setCallResult(mapped);
           setCallState(CALL_STATES.COMPLETED);
           setStatus(`📞 ${mapped === "Boite_Vocale" ? "Boîte vocale" : mapped}`);
@@ -232,8 +254,9 @@ export default function PowerDialer() {
     setTimeout(() => {
       clearPollingOutcome();
       setCallState(CALL_STATES.COMPLETED);
-      setCallResult("Boite_Vocale");
-      updateCallResult("Boite_Vocale", "Simulation - Message laissé");
+      const simulated = "Boite_Vocale" as CallResult;
+      setCallResult(simulated);
+      updateCallResult(simulated, "Simulation - Message laissé");
       setStatus("📞 Simulation - Boîte vocale");
       setTimeout(() => next(), 2000);
     }, 3000);

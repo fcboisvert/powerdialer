@@ -1,3 +1,5 @@
+/// <reference types="@cloudflare/workers-types" />
+import type { PagesFunction, KVNamespace } from '@cloudflare/workers-types';
 // functions/api/call-outcome.ts
 // Updated: maps valid outcomes to Airtable-friendly values, patches Airtable automatically,
 // and returns a 200 response that PowerDialer can trust.
@@ -72,7 +74,13 @@ export const onRequest: PagesFunction<{ OUTCOMES_KV: KVNamespace }> = async (
       { status: 400, headers: { 'content-type': 'application/json', ...corsHeaders } },
     );
   }
-
+  const existingOutcome = await kv.get(`outcome_${callId}`);
+  if (existingOutcome) {
+    return new Response(JSON.stringify({ success: true, message: 'Outcome already recorded' }), {
+      status: 200,
+      headers: { 'content-type': 'application/json', ...corsHeaders },
+    });
+  }
   // --- Persist outcome to KV (24h TTL) -------------------------------
   const outcomeData = { ...payload, timestamp: new Date().toISOString(), processed: false };
   await kv.put(`outcome_${callId}`, JSON.stringify(outcomeData), { expirationTtl: 86_400 });

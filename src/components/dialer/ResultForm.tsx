@@ -1,22 +1,32 @@
 // C:\Users\Frédéric-CharlesBois\projects\Powerdialer\src\components\dialer\ResultForm.tsx
+
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { CalendarIcon } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { cn } from '@/lib/utils'; // Assuming you have a cn utility for classnames
+import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 
+import type { CallResult } from "@/types/dialer";
+
+
 interface ResultFormProps {
-  callResult: string;
+  callResult: CallResult;
   callNotes: string;
   meetingNotes: string;
   meetingDatetime: string;
   script: string;
-  onCallResultChange: (value: string) => void;
+  onCallResultChange: (value: CallResult) => void;
   onCallNotesChange: (value: string) => void;
   onMeetingNotesChange: (value: string) => void;
   onMeetingDatetimeChange: (value: string) => void;
@@ -48,6 +58,7 @@ const ResultForm = ({
               {script || '—'}
             </p>
           </div>
+
           <div>
             <Label htmlFor="notes-appel" className="text-sm font-medium text-slate-700">Notes (Appel)</Label>
             <Textarea
@@ -58,6 +69,7 @@ const ResultForm = ({
               className="mt-1 min-h-[80px] text-sm"
             />
           </div>
+
           <div>
             <Label htmlFor="resultat-appel" className="text-sm font-medium text-slate-700">Résultat (Appel)</Label>
             <Select value={callResult} onValueChange={onCallResultChange}>
@@ -82,6 +94,7 @@ const ResultForm = ({
               </SelectContent>
             </Select>
           </div>
+
           <div>
             <Label htmlFor="date-heure-rencontre" className="text-sm font-medium text-slate-700">Date / Heure (Rencontre)</Label>
             <Popover>
@@ -107,7 +120,13 @@ const ResultForm = ({
               </PopoverContent>
             </Popover>
           </div>
-          <Button type="submit" className="w-full mt-4 bg-[#E24218] hover:bg-[#d03d15] text-white">Sauvegarder & Continuer</Button>
+
+          <Button
+            type="submit"
+            className="w-full mt-4 bg-[#E24218] hover:bg-[#d03d15] text-white"
+          >
+            Sauvegarder & Continuer
+          </Button>
         </form>
       </CardContent>
     </Card>
