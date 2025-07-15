@@ -1,7 +1,9 @@
+// functions/api/queue.ts
 /**
- * Cloudflare Pages Function: Airtable Call Queue API (Agent-facing)
- * GET  /api/queue?agent=Frédéric-Charles Boisvert → fetches queue from Airtable view
- * POST /api/queue { id, status }                  → patches call status in Airtable
+ * Airtable Call-Queue API  – Cloudflare Pages Function
+ *
+ * GET  /api/queue?agent=frederic   → list leads from the agent’s “To Call” view
+ * POST /api/queue                  → { id, status }  patch lead status
  */
 
 interface Env {
@@ -11,158 +13,138 @@ interface Env {
   AIRTABLE_TABLE: string;
 }
 
-const CORS_HEADERS = {
+/* ───── Constants ───── */
+
+const CORS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type",
-};
+} as const;
 
-const FIELD_KEYS = {
-  fullName: "Full Name",
-  priority: "Priorité",  // Confirm exact name in Airtable (with/without accent)
-  mobile: "Mobile Phone",
-  direct: "Direct Phone",
-  company: "Company Phone",
-  status: "Statut de l'Activité",
-  agent: "Responsable de l'Activité",
-};
-
-const VIEW_MAP: Record<string, string> = {
+const VIEW_BY_AGENT: Record<string, string> = {
   "Simon McConnell": "To Call View - simon",
-  "Frédéric-Charles Boisvert": "To Call View - frederic",  // Confirm exact view name (add accent if needed, e.g., "To Call View - Frédéric")
+  "Frédéric-Charles Boisvert": "To Call View - frederic",
 };
 
-type AirtableRecord = {
-  id: string;
-  fields: Record<string, any>;
+const SLUG_TO_AGENT: Record<string, string> = {
+  frederic: "Frédéric-Charles Boisvert",
+  simon: "Simon McConnell",
 };
 
-export const onRequest: PagesFunction<Env> = async ({ request, env }) => {
-  const url = new URL(request.url);
-  const method = request.method;
+const F_STATUS = "Statut de l'Activité";
 
-  if (method === "OPTIONS") return new Response(null, { status: 204, headers: CORS_HEADERS });
+/* ───── GET handler ───── */
 
-  if (method === "GET") {
-    const agent = url.searchParams.get("agent");
-    if (!agent || !VIEW_MAP[agent]) {
-      return respond({ error: "Invalid or missing 'agent'" }, 400);
-    }
+export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
+  const raw = (new URL(request.url)).searchParams.get("agent") ?? "";
+  const agent = VIEW_BY_AGENT[raw]         // long name
+             ?? VIEW_BY_AGENT[SLUG_TO_AGENT[raw.toLowerCase()] ?? ""]; // slug
 
-    const view = VIEW_MAP[agent];
-    const baseUrl = `https://api.airtable.com/v0/${env.AIRTABLE_BASE}/${encodeURIComponent(env.AIRTABLE_TABLE)}`;
-    const query = `?view=${encodeURIComponent(view)}`;  // Removed sort for debugging; add back if needed: &sort[0][field]=${encodeURIComponent(FIELD_KEYS.priority)}&sort[0][direction]=asc
-
-    try {
-      const records = await fetchAllAirtable(`${baseUrl}${query}`, env.AIRTABLE_READ_TOKEN);
-      const leads = records.map(mapAirtableRecord);
-      return respond(leads, 200);
-    } catch (err) {
-      console.error("Airtable GET error:", err);
-      return respond({ error: "Failed to fetch queue", details: String(err) }, 502);
-    }
+  if (!agent) {
+    return json({ error: "Invalid or missing 'agent' param" }, 400);
   }
 
-  if (method === "POST") {
-    let body: any;
-    try {
-      body = await request.json();
-    } catch {
-      return respond({ error: "Invalid JSON in body" }, 400);
-    }
+  const base = `https://api.airtable.com/v0/${env.AIRTABLE_BASE}/${encodeURIComponent(
+    env.AIRTABLE_TABLE
+  )}`;
+  const url = `${base}?view=${encodeURIComponent(agent)}`;
 
-    const { id, status } = body;
-    if (!id || !status) return respond({ error: "'id' and 'status' required" }, 400);
-
-    try {
-      const patchUrl = `https://api.airtable.com/v0/${env.AIRTABLE_BASE}/${encodeURIComponent(env.AIRTABLE_TABLE)}`;
-      const patchBody = {
-        records: [{ id, fields: { [FIELD_KEYS.status]: status } }],
-      };
-
-      const res = await fetch(patchUrl, {
-        method: "PATCH",
-        headers: {
-          Authorization: `Bearer ${env.AIRTABLE_WRITE_TOKEN}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(patchBody),
-      });
-
-      if (!res.ok) {
-        const details = await res.text();
-        return respond({ error: "Airtable update failed", details }, res.status);
-      }
-
-      return respond({ ok: true }, 200);
-    } catch (err) {
-      console.error("Airtable PATCH error:", err);
-      return respond({ error: "Failed to update lead" }, 502);
-    }
+  try {
+    const records = await fetchAll(url, env.AIRTABLE_READ_TOKEN);
+    return json(records.map(mapRecord), 200);
+  } catch (err) {
+    console.error("Airtable GET error:", err);
+    return json({ error: "Failed to fetch queue" }, 502);
   }
-
-  return respond({ error: "Method Not Allowed" }, 405);
 };
 
-// ─────────── Utilities ─────────── //
+/* ───── POST handler ───── */
 
-const respond = (data: any, status: number): Response =>
-  new Response(JSON.stringify(data), {
-    status,
-    headers: { "Content-Type": "application/json", ...CORS_HEADERS },
+export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
+  let body: { id?: string; status?: string };
+  try {
+    body = await request.json();
+  } catch {
+    return json({ error: "Body must be valid JSON" }, 400);
+  }
+
+  const { id, status } = body;
+  if (!id || !status) return json({ error: "'id' and 'status' required" }, 400);
+
+  const patchUrl = `https://api.airtable.com/v0/${env.AIRTABLE_BASE}/${encodeURIComponent(
+    env.AIRTABLE_TABLE
+  )}`;
+  const res = await fetch(patchUrl, {
+    method: "PATCH",
+    headers: {
+      Authorization: `Bearer ${env.AIRTABLE_WRITE_TOKEN}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ records: [{ id, fields: { [F_STATUS]: status } }] }),
   });
 
-async function fetchAllAirtable(baseUrl: string, token: string): Promise<AirtableRecord[]> {
-  let records: AirtableRecord[] = [];
+  if (!res.ok) {
+    const details = await res.text();
+    return json({ error: "Airtable update failed", details }, res.status);
+  }
+
+  return json({ ok: true }, 200);
+};
+
+/* ───── Utilities ───── */
+
+const json = (data: unknown, status = 200): Response =>
+  new Response(JSON.stringify(data), {
+    status,
+    headers: { "Content-Type": "application/json", ...CORS },
+  });
+
+async function fetchAll(
+  base: string,
+  token: string
+): Promise<AirtableRecord[]> {
+  let out: AirtableRecord[] = [];
   let offset: string | undefined;
 
   do {
-    const url = offset ? `${baseUrl}&offset=${offset}` : baseUrl;
-    const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
-    if (!res.ok) throw new Error(`Airtable fetch failed with status ${res.status}`);
-    const json = await res.json();
-    records = records.concat(json.records || []);
-    offset = json.offset;
+    const url = offset ? `${base}&offset=${offset}` : base;
+    const res = await fetch(url, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) throw new Error(`Airtable status ${res.status}`);
+    const { records, offset: next } = await res.json();
+    if (!records?.length) break; // early exit: empty view
+    out = out.concat(records);
+    offset = next;
   } while (offset);
 
-  return records;
+  return out;
 }
 
-function mapAirtableRecord(rec: AirtableRecord) {
-  const f = rec.fields;
-  const safe = (key: string) => (f[key] ?? "").toString().trim();
+type AirtableRecord = { id: string; fields: Record<string, any> };
 
+function mapRecord(r: AirtableRecord) {
+  const f = (k: string) => (r.fields[k] ?? "").toString().trim();
   return {
-    id: rec.id,
-    Full_Name: safe("Full Name"),
-    Job_Title: safe("Job Title"),
-    Nom_de_la_compagnie: safe("Nom de la compagnie"),
-    LinkedIn_URL: safe("Contact LinkedIn URL"),
-    Mobile_Phone: safe("Mobile Phone"),
-    Direct_Phone: safe("Direct Phone"),
-    Company_Phone: safe("Company Phone"),
-    // Handles every spelling / apostrophe variant used in Airtable
+    id: r.id,
+    Full_Name: f("Full Name"),
+    Job_Title: f("Job Title"),
+    Nom_de_la_compagnie: f("Nom de la compagnie"),
+    LinkedIn_URL: f("Contact LinkedIn URL"),
+    Mobile_Phone: f("Mobile Phone"),
+    Direct_Phone: f("Direct Phone"),
+    Company_Phone: f("Company Phone"),
     Nom_de_l_Activite:
-      safe("Nom de l’Activité")   ||   // smart apostrophe, capital A
-      safe("Nom de l’activité")   ||   // smart apostrophe, lower-case a
-      safe("Nom de l'activité")   ||   // straight apostrophe, lower-case a
-      safe("Nom de l'Activité")   ||   // straight apostrophe, capital A
-      safe("Nom de l'Activite"),
-
-    Priorite: safe("Priorité"),
-    Date_et_Heure_Rencontre: safe("Notes Rencontres"),
-    Statut_de_l_Activite: safe("Statut de l'Activité"),
-    Linked_Notes: safe("Linked Notes"),
-    Flow_URL: safe("Flow URL"),
-    Message_content: safe("Message content"),
-    Resultat_Appel: safe("Résultat (Appel)"),
-    Opportunity: safe("Opportunity"),
-    "Activité 2.0": safe("Activité 2.0"),
-    "Activité 2.0 H.C.": safe("Activité 2.0 H.C."),
-    "Responsable de l'Activité": safe("Responsable de l'Activité"),
-    "Nom du Responsable": safe("Nom du Responsable"),
-    Entreprise: safe("Entreprise (from Opportunity)"),
-    "Type d'Activité 2.0": safe("Type d'Activité 2.0"),
-    Call_Triggered: safe("Call Triggered"), 
+      f("Nom de l’Activité") ||
+      f("Nom de l’activité") ||
+      f("Nom de l'activité") ||
+      f("Nom de l'Activité") ||
+      f("Nom de l'Activite"),
+    Priorite: f("Priorité"),
+    Notes_Rencontres: f("Notes Rencontres"),
+    Statut_de_l_Activite: f(F_STATUS),
+    Resultat_Appel: f("Résultat (Appel)"),
+    Opportunity: f("Opportunity"),
+    // add other fields as needed …
   };
 }
