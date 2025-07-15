@@ -19,7 +19,7 @@ import { useNavigate } from "react-router-dom";
 const STUDIO_API_URL = "https://texion.app/api/studio";
 const FLOW_SID = "FW236e663e008973ab36cbfcdc706b6d97";
 const QUEUE_API_URL = "https://texion.app/api/queue";
-const AIRTABLE_API_URL = "https://texion.app/api/airtable";
+const AIRTABLE_UPDATE_URL = "https://texion.app/api/airtable/update-result";
 const AGENT_CALLER_IDS: Record<string, string[]> = {
   "Frédéric-Charles Boisvert": ["+14388178171"],
   "Simon McConnell": ["+14388178177"],
@@ -145,6 +145,8 @@ export default function PowerDialer() {
       if (!json.success) throw new Error(json.error || "API error");
       setCurrentExecutionSid(json.executionSid);
       setStatus(`📞 Flow déclenché – ex ${json.executionSid.slice(-6)}`);
+      setCallState(CALL_STATES.WAITING_OUTCOME);
+      setShowForm(true); // Show form after successful trigger
     } catch (err: any) {
       setCallState(CALL_STATES.ERROR);
       setStatus(`❌ Erreur : ${err.message}`);
@@ -176,7 +178,7 @@ export default function PowerDialer() {
     if (callState !== CALL_STATES.IDLE) return setStatus("Appel en cours…");
     setCallState(CALL_STATES.TRIGGERING_FLOW);
     setStatus("🎭 Simulation d'appel...");
-    setShowForm(false);
+    setShowForm(true); // Show form during simulation
 
     const callId =
       typeof crypto.randomUUID === "function"
@@ -238,7 +240,7 @@ export default function PowerDialer() {
       activity: get(current, "Nom_de_l_Activite"),
       callId: current?.id || "unknown-call-id",
       agent,
-      script: get(current, "Script_Appel"),
+      script: get(current, "Message_content"),
     };
 
     if (["Boite_Vocale", "Pas_Joignable"].includes(result)) {
@@ -254,13 +256,27 @@ export default function PowerDialer() {
         console.error("❌ API call-outcome error:", err.message);
       }
     } else {
-      console.log("📝 Saving manually filled outcome:", {
-        result,
-        notes,
-        meetingNotes,
-        meetingDatetime,
-      });
-      // TODO: Airtable update logic (if applicable)
+      try {
+        const updatePayload = {
+          recordId: current.id,
+          activityName: get(current, "Nom_de_l_Activite"),
+          result,
+          notes,
+          agent,
+          meetingNotes,
+          meetingDatetime,
+          statut: "Fait"
+        };
+        const res = await fetch(AIRTABLE_UPDATE_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(updatePayload),
+        });
+        if (!res.ok) throw new Error("Airtable update API failed");
+        console.log("✅ Airtable updated:", result);
+      } catch (err: any) {
+        console.error("❌ Airtable update error:", err.message);
+      }
     }
   }
 
@@ -310,10 +326,6 @@ export default function PowerDialer() {
         </div>
         <div className="grid md:grid-cols-2 gap-6 text-sm">
           <div>
-            <div className="w-full mb-6 p-4 bg-slate-50 rounded-xl border border-slate-200 text-sm">
-              <h4 className="font-semibold text-slate-700 mb-2">📜 Script d'appel</h4>
-              <p className="text-zinc-800 whitespace-pre-line">{get(current, "Script_Appel")}</p>
-            </div>
             <h3 className="mb-2 font-semibold text-zinc-800">Infos Prospect</h3>
             <Field label="Nom" value={get(current, "Full_Name")} />
             <Field label="Fonction" value={get(current, "Job_Title")} />
@@ -324,11 +336,12 @@ export default function PowerDialer() {
             <Field label="Téléphone entreprise" value={get(current, "Company_Phone")} />
           </div>
           <div>
+            <h3 className="mb-2 font-semibold text-zinc-800">Infos Activité</h3>
             <Field label="Nom de l’activité" value={get(current, "Nom_de_l_Activite")} />
+            <Field label="Type d'Activité" value={get(current, "Activité 2.0 H.C.")} />
+            <Field label="Responsable de l'Activité" value={get(current, "Nom du Responsable")} />
             <Field label="Priorité" value={get(current, "Priorite")} />
-            <Field label="Date / Heure" value={get(current, "Date_et_Heure_Rencontre")} />
             <Field label="Statut" value={get(current, "Statut_de_l_Activite", "À Faire")} />
-            <Field label="Notes liées" value={get(current, "Linked_Notes")} />
           </div>
         </div>
         <div
@@ -400,7 +413,7 @@ export default function PowerDialer() {
               callNotes={callNotes}
               meetingNotes={meetingNotes}
               meetingDatetime={meetingDatetime}
-              callStartTime={null}
+              script={get(current, "Message_content")}
               onCallResultChange={setCallResult}
               onCallNotesChange={setCallNotes}
               onMeetingNotesChange={setMeetingNotes}
