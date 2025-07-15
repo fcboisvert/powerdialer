@@ -1,18 +1,18 @@
-// C:\Users\Frédéric-CharlesBois\projects\Powerdialer\functions\api\call-outcome.ts
-/**
- * POST /call-outcome
- * Receives call outcomes from Twilio Studio Flow
- * 
- * Expected body:
- * {
- *   "outcome": "Répondu_Humain" | "Répondeur" | "Pas_Joignable",
- *   "number": "+15141234567",
- *   "activity": "SPARK Microsystems-Jean-Sebastien Poirier-T2-0.3 Cold Call 1",
- *   "callId": "call_1234567890_abc123",
- *   "agent": "frederic"
- *   "activityName": "TEXION - Frédéric-Charles Boisvert - T2-0.3 Cold Call 1"
- * }
- */
+// functions/api/call-outcome.ts
+// Updated: maps valid outcomes to Airtable-friendly values, patches Airtable automatically,
+// and returns a 200 response that PowerDialer can trust.
+// -----------------------------------------------------------------------------
+// POST /call-outcome
+// Expected body:
+// {
+//   "outcome": "Répondu_Humain" | "Répondeur" | "Pas_Joignable",
+//   "number" : "+15141234567",
+//   "activity" : "T2-0.3 Cold Call 1",
+//   "activityName": "TEXION - …",
+//   "callId" : "uuid",
+//   "agent"  : "frederic"
+// }
+// -----------------------------------------------------------------------------
 
 interface CallOutcomePayload {
   outcome: 'Répondu_Humain' | 'Répondeur' | 'Pas_Joignable';
@@ -23,191 +23,101 @@ interface CallOutcomePayload {
   agent: string;
 }
 
-export const onRequest: PagesFunction<{ OUTCOMES_KV: KVNamespace }> = async (ctx) => {
+export const onRequest: PagesFunction<{ OUTCOMES_KV: KVNamespace }> = async (
+  ctx,
+) => {
   const kv = ctx.env.OUTCOMES_KV;
   const { request } = ctx;
-  
+
+  // --- CORS -----------------------------------------------------------
   const corsHeaders = {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type',
-  };
+  } as const;
 
   if (request.method === 'OPTIONS') {
     return new Response(null, { status: 200, headers: corsHeaders });
   }
-
   if (request.method !== 'POST') {
     return new Response(
-      JSON.stringify({ error: 'Method Not Allowed' }), 
-      { 
-        status: 405,
-        headers: { 
-          'content-type': 'application/json',
-          ...corsHeaders
-        }
-      }
+      JSON.stringify({ error: 'Method Not Allowed' }),
+      { status: 405, headers: { 'content-type': 'application/json', ...corsHeaders } },
     );
   }
 
+  // --- Parse + validate payload --------------------------------------
+  let payload: CallOutcomePayload;
   try {
-    let payload: CallOutcomePayload;
-    
-    try {
-      payload = await request.json();
-    } catch (jsonError) {
-      return new Response(
-        JSON.stringify({ error: 'Invalid JSON in request body' }), 
-        { 
-          status: 400,
-          headers: { 
-            'content-type': 'application/json',
-            ...corsHeaders
-          }
-        }
-      );
-    }
-
-    // Validate required fields
-    if (!payload.outcome || !payload.callId || !payload.agent) {
-      return new Response(
-        JSON.stringify({ 
-          error: 'Missing required fields: outcome, callId, agent' 
-        }), 
-        { 
-          status: 400,
-          headers: { 
-            'content-type': 'application/json',
-            ...corsHeaders
-          }
-        }
-      );
-    }
-
-    // Validate outcome values
-    const validOutcomes = ['Répondu_Humain', 'Répondeur', 'Pas_Joignable'];
-    if (!validOutcomes.includes(payload.outcome)) {
-      return new Response(
-        JSON.stringify({ 
-          error: `Invalid outcome. Must be one of: ${validOutcomes.join(', ')}` 
-        }), 
-        { 
-          status: 400,
-          headers: { 
-            'content-type': 'application/json',
-            ...corsHeaders
-          }
-        }
-      );
-    }
-
-    console.log('Call outcome received:', payload);
-
-    // Store the outcome in KV for PowerDialer to potentially retrieve
-    const outcomeData = {
-      ...payload,
-      timestamp: new Date().toISOString(),
-      processed: false
-    };
-
-    try {
-      // Store with callId as key for specific call tracking
-      await kv.put(
-        `outcome_${payload.callId}`, 
-        JSON.stringify(outcomeData), 
-        { expirationTtl: 86400 } // 24 hours
-      );
-
-      // Also store in agent's recent outcomes list
-      const agentKey = `recent_outcomes_${payload.agent.toLowerCase()}`;
-      const existingOutcomes = await kv.get(agentKey);
-      let recentOutcomes = existingOutcomes ? JSON.parse(existingOutcomes) : [];
-
-      recentOutcomes.unshift(outcomeData);
-      recentOutcomes = recentOutcomes.slice(0, 10);
-
-      await kv.put(
-        agentKey,
-        JSON.stringify(recentOutcomes),
-        { expirationTtl: 86400 } // 24 hours
-      );
-
-      console.log(`Stored outcome for agent ${payload.agent}: ${payload.outcome}`);
-
-      // Auto-update Airtable for "Répondeur" and "Pas_Joignable"
-      if (payload.outcome === 'Répondeur' || payload.outcome === 'Pas_Joignable') {
-        let result = '';
-        if (payload.outcome === 'Répondeur') {
-          result = 'Boite_Vocale';
-        } else if (payload.outcome === 'Pas_Joignable') {
-          result = 'Pas_Joignable';
-        }
-
-        const updatePayload = {
-          activityName: payload.activityName,
-          result: result,
-          notes: '',  // No notes for auto updates
-          agent: payload.agent,
-          meetingNotes: '',
-          meetingDatetime: '',
-          statut: "Fait"
-        };
-
-        // Fetch to Airtable update API
-        const res = await fetch('https://texion.app/api/airtable/update-result', {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(updatePayload),
-        });
-
-        if (!res.ok) {
-          console.error('Airtable update failed:', await res.text());
-        } else {
-          console.log('Airtable updated successfully for outcome:', payload.outcome);
-        }
-      }
-
-      return new Response(
-        JSON.stringify({ 
-          success: true, 
-          message: 'Call outcome recorded successfully',
-          callId: payload.callId,
-          outcome: payload.outcome
-        }), 
-        { 
-          status: 200,
-          headers: { 
-            'content-type': 'application/json',
-            ...corsHeaders
-          }
-        }
-      );
-
-    } catch (kvError) {
-      console.error('KV storage error:', kvError);
-      return new Response(
-        JSON.stringify({ error: 'Failed to store call outcome' }), 
-        { 
-          status: 500,
-          headers: { 
-            'content-type': 'application/json',
-            ...corsHeaders
-          }
-        }
-      );
-    }
-
-  } catch (error) {
-    console.error('Unexpected error in call-outcome:', error);
+    payload = await request.json();
+  } catch (_) {
     return new Response(
-      JSON.stringify({ error: 'Internal server error' }), 
-      { 
-        status: 500,
-        headers: { 
-          'content-type': 'application/json',
-          ...corsHeaders
-        }
-      }
+      JSON.stringify({ error: 'Invalid JSON in request body' }),
+      { status: 400, headers: { 'content-type': 'application/json', ...corsHeaders } },
     );
   }
+
+  const { outcome, callId, agent } = payload;
+  if (!outcome || !callId || !agent) {
+    return new Response(
+      JSON.stringify({ error: 'Missing required fields: outcome, callId, agent' }),
+      { status: 400, headers: { 'content-type': 'application/json', ...corsHeaders } },
+    );
+  }
+
+  const validOutcomes = ['Répondu_Humain', 'Répondeur', 'Pas_Joignable'] as const;
+  if (!validOutcomes.includes(outcome)) {
+    return new Response(
+      JSON.stringify({ error: `Invalid outcome. Must be one of: ${validOutcomes.join(', ')}` }),
+      { status: 400, headers: { 'content-type': 'application/json', ...corsHeaders } },
+    );
+  }
+
+  // --- Persist outcome to KV (24h TTL) -------------------------------
+  const outcomeData = { ...payload, timestamp: new Date().toISOString(), processed: false };
+  await kv.put(`outcome_${callId}`, JSON.stringify(outcomeData), { expirationTtl: 86_400 });
+
+  // keep last 10 outcomes per agent for quick lookup
+  const agentKey = `recent_outcomes_${agent.toLowerCase()}`;
+  const existing = await kv.get(agentKey);
+  const recent = existing ? (JSON.parse(existing) as typeof outcomeData[]) : [];
+  recent.unshift(outcomeData);
+  await kv.put(agentKey, JSON.stringify(recent.slice(0, 10)), { expirationTtl: 86_400 });
+
+  // --- Map outcome for Airtable --------------------------------------
+  const AT_OUTCOME_MAP: Record<CallOutcomePayload['outcome'], 'Répondu_Humain' | 'Boite_Vocale' | 'Pas_Joignable'> = {
+    Répondu_Humain: 'Répondu_Humain',
+    Répondeur: 'Boite_Vocale',
+    Pas_Joignable: 'Pas_Joignable',
+  };
+  const airtableResult = AT_OUTCOME_MAP[outcome];
+
+  // Patch Airtable only for voicemail or not‑reachable; human replies handled manually.
+  if (['Répondeur', 'Pas_Joignable'].includes(outcome)) {
+    const res = await fetch('https://texion.app/api/airtable/update-result', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        activityName: payload.activityName,
+        result: airtableResult,
+        notes: '',
+        agent: payload.agent,
+        meetingNotes: '',
+        meetingDatetime: '',
+        statut: 'Fait',
+      }),
+    });
+
+    if (!res.ok) {
+      console.error('[call-outcome] Airtable update failed:', await res.text());
+    } else {
+      console.log('[call-outcome] Airtable updated ✔', airtableResult);
+    }
+  }
+
+  // --- Success response ----------------------------------------------
+  return new Response(
+    JSON.stringify({ success: true, message: 'Call outcome recorded successfully', callId, outcome }),
+    { status: 200, headers: { 'content-type': 'application/json', ...corsHeaders } },
+  );
 };

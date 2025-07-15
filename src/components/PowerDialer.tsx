@@ -1,5 +1,13 @@
-// C:\Users\Frédéric-CharlesBois\projects\Powerdialer\src\components\PowerDialer.tsx
-import React, { useEffect, useState } from "react";
+// PowerDialer.tsx — full file with automatic outcome polling integrated
+// -----------------------------------------------------------------------------
+// KEY ADDITIONS (search for "// >>>" comments):
+// 1. OUTCOME_POLL_URL const
+// 2. pollRef via useRef
+// 3. startPollingOutcome(callId) helper
+// 4. clearPollingOutcome() helper called from hang, save, next
+// -----------------------------------------------------------------------------
+
+import React, { useEffect, useState, useRef } from "react";
 import type { CallRecord } from "@/types/dialer";
 import { Button } from "@/components/ui/button";
 import {
@@ -20,6 +28,9 @@ const STUDIO_API_URL = "https://texion.app/api/studio";
 const FLOW_SID = "FW52d9007999380cfbb435838d0733e84c";
 const QUEUE_API_URL = "https://texion.app/api/queue";
 const AIRTABLE_UPDATE_URL = "https://texion.app/api/airtable/update-result";
+// >>> new endpoint that simply reads KV by callId
+const OUTCOME_POLL_URL = "https://texion.app/api/outcome";
+
 const AGENT_CALLER_IDS: Record<string, string[]> = {
   "Frédéric-Charles Boisvert": ["+14388178171"],
   "Simon McConnell": ["+14388178177"],
@@ -39,6 +50,8 @@ const CALL_STATES = {
 
 export default function PowerDialer() {
   const navigate = useNavigate();
+  // >>> ref to store interval id so we can clear it
+  const pollRef = useRef<NodeJS.Timeout | null>(null);
 
   // === STATE ===
   const [records, setRecords] = useState<CallRecord[]>([]);
@@ -62,6 +75,40 @@ export default function PowerDialer() {
   const current = records[idx] ?? {};
   const get = (obj: any, key: string, fb = "—") => Array.isArray(obj?.[key]) ? obj[key][0] ?? fb : obj?.[key] ?? fb;
 
+  // ------------------------------------------------------------------
+  // Helper to start polling KV for outcome until we get it or timeout
+  // ------------------------------------------------------------------
+  const startPollingOutcome = (callId: string) => {
+    let attempts = 0;
+    if (pollRef.current) clearInterval(pollRef.current);
+    pollRef.current = setInterval(async () => {
+      if (attempts++ > 10) { // ~40s timeout
+        clearInterval(pollRef.current!);
+        return;
+      }
+      try {
+        const res = await fetch(`${OUTCOME_POLL_URL}?callId=${callId}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data?.outcome) {
+          clearInterval(pollRef.current!);
+          const mapped = data.outcome === "Répondeur" ? "Boite_Vocale" : data.outcome;
+          setCallResult(mapped);
+          setCallState(CALL_STATES.COMPLETED);
+          setStatus(`📞 ${mapped === "Boite_Vocale" ? "Boîte vocale" : mapped}`);
+          setShowForm(true);
+        }
+      } catch (_) {}
+    }, 4000);
+  };
+
+  const clearPollingOutcome = () => {
+    if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+  };
+
+  // ------------------------------------------------------------------
+  // Fetch queue
+  // ------------------------------------------------------------------
   useEffect(() => {
     (async () => {
       setLoading(true);
@@ -146,7 +193,8 @@ export default function PowerDialer() {
       setCurrentExecutionSid(json.executionSid);
       setStatus(`📞 Flow déclenché – ex ${json.executionSid.slice(-6)}`);
       setCallState(CALL_STATES.WAITING_OUTCOME);
-      setShowForm(true); // Show form after successful trigger
+      // >>> start polling for outcome now
+      startPollingOutcome(callId);
     } catch (err: any) {
       setCallState(CALL_STATES.ERROR);
       setStatus(`❌ Erreur : ${err.message}`);
@@ -159,15 +207,13 @@ export default function PowerDialer() {
         await fetch(`${STUDIO_API_URL}/end-execution`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            flowSid: FLOW_SID,
-            executionSid: currentExecutionSid,
-          }),
+          body: JSON.stringify({ flowSid: FLOW_SID, executionSid: currentExecutionSid }),
         });
       } catch (error) {
         setStatus(`❌ Erreur lors de l'arrêt : ${error instanceof Error ? error.message : String(error)}`);
       }
     }
+    clearPollingOutcome();
     setCurrentExecutionSid(null);
     setCallState(CALL_STATES.IDLE);
     setShowForm(false);
@@ -178,16 +224,13 @@ export default function PowerDialer() {
     if (callState !== CALL_STATES.IDLE) return setStatus("Appel en cours…");
     setCallState(CALL_STATES.TRIGGERING_FLOW);
     setStatus("🎭 Simulation d'appel...");
-    setShowForm(true); // Show form during simulation
+    setShowForm(true);
 
-    const callId =
-      typeof crypto.randomUUID === "function"
-        ? crypto.randomUUID()
-        : Date.now().toString();
-
+    const callId = typeof crypto.randomUUID === "function" ? crypto.randomUUID() : Date.now().toString();
     (current as any).id = callId;
 
     setTimeout(() => {
+      clearPollingOutcome();
       setCallState(CALL_STATES.COMPLETED);
       setCallResult("Boite_Vocale");
       updateCallResult("Boite_Vocale", "Simulation - Message laissé");
@@ -200,6 +243,7 @@ export default function PowerDialer() {
     if (callState !== CALL_STATES.IDLE && callState !== CALL_STATES.COMPLETED) {
       return setStatus("Terminez l'opération en cours");
     }
+    clearPollingOutcome();
     setIdx((i) => (i + 1 < records.length ? i + 1 : i));
     setCallResult("");
     setCallNotes("");
@@ -218,6 +262,7 @@ export default function PowerDialer() {
     }
     setStatus("💾 Sauvegarde en cours...");
     await updateCallResult(callResult, callNotes, meetingNotes, meetingDatetime);
+    clearPollingOutcome();
     setMeetingNotes("");
     setMeetingDatetime("");
     setCallState(CALL_STATES.IDLE);
@@ -238,6 +283,7 @@ export default function PowerDialer() {
         get(current, "Direct_Phone") ||
         get(current, "Company_Phone"),
       activity: get(current, "Nom_de_l_Activite"),
+      activityName: get(current, "Nom_de_l_Activite"),
       callId: current?.id || "unknown-call-id",
       agent,
       script: get(current, "Message_content"),
@@ -257,20 +303,19 @@ export default function PowerDialer() {
       }
     } else {
       try {
-        const updatePayload = {
-          recordId: current.id,
-          activityName: get(current, "Nom_de_l_Activite"),
-          result,
-          notes,
-          agent,
-          meetingNotes,
-          meetingDatetime,
-          statut: "Fait"
-        };
         const res = await fetch(AIRTABLE_UPDATE_URL, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(updatePayload),
+          body: JSON.stringify({
+            recordId: current.id,
+            activityName: get(current, "Nom_de_l_Activite"),
+            result,
+            notes,
+            agent,
+            meetingNotes,
+            meetingDatetime,
+            statut: "Fait",
+          }),
         });
         if (!res.ok) throw new Error("Airtable update API failed");
         console.log("✅ Airtable updated:", result);
@@ -284,10 +329,9 @@ export default function PowerDialer() {
     if (callState !== CALL_STATES.IDLE) {
       if (!window.confirm("Un appel est en cours. Quitter ?")) return;
     }
+    clearPollingOutcome();
     localStorage.removeItem("texion_agent");
-    setTimeout(() => {
-      navigate("/", { replace: true });
-    }, 100);
+    setTimeout(() => { navigate("/", { replace: true }); }, 100);
   };
 
   // === UI RENDER ===
