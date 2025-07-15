@@ -10,6 +10,7 @@
  *   "activity": "SPARK Microsystems-Jean-Sebastien Poirier-T2-0.3 Cold Call 1",
  *   "callId": "call_1234567890_abc123",
  *   "agent": "frederic"
+ *   "activityName": "TEXION - Frédéric-Charles Boisvert - T2-0.3 Cold Call 1"
  * }
  */
 
@@ -17,6 +18,7 @@ interface CallOutcomePayload {
   outcome: 'Répondu_Humain' | 'Répondeur' | 'Pas_Joignable';
   number: string;
   activity: string;
+  activityName: string;
   callId: string;
   agent: string;
 }
@@ -131,6 +133,39 @@ export const onRequest: PagesFunction<{ OUTCOMES_KV: KVNamespace }> = async (ctx
       );
 
       console.log(`Stored outcome for agent ${payload.agent}: ${payload.outcome}`);
+
+      // Auto-update Airtable for "Répondeur" and "Pas_Joignable"
+      if (payload.outcome === 'Répondeur' || payload.outcome === 'Pas_Joignable') {
+        let result = '';
+        if (payload.outcome === 'Répondeur') {
+          result = 'Boite_Vocale';
+        } else if (payload.outcome === 'Pas_Joignable') {
+          result = 'Pas_Joignable';
+        }
+
+        const updatePayload = {
+          activityName: payload.activityName,
+          result: result,
+          notes: '',  // No notes for auto updates
+          agent: payload.agent,
+          meetingNotes: '',
+          meetingDatetime: '',
+          statut: "Fait"
+        };
+
+        // Fetch to Airtable update API
+        const res = await fetch('https://texion.app/api/airtable/update-result', {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(updatePayload),
+        });
+
+        if (!res.ok) {
+          console.error('Airtable update failed:', await res.text());
+        } else {
+          console.log('Airtable updated successfully for outcome:', payload.outcome);
+        }
+      }
 
       return new Response(
         JSON.stringify({ 
