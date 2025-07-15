@@ -5,7 +5,7 @@ import {
   PhoneCall,
   BarChart3,
   Settings,
-  AppWindow,
+  LogOut,
 } from "lucide-react";
 
 import Logo from "/texion-logo.svg";
@@ -31,6 +31,11 @@ const apps = [
 export default function AppSelector() {
   const navigate = useNavigate();
 
+  const handleLogout = () => {
+    localStorage.removeItem("texion_agent");
+    navigate("/", { replace: true });
+  };
+
   return (
     <div className="min-h-screen flex flex-col bg-gradient-to-br from-[#f8fafc] via-white to-[#f3f4f6]">
       {/* Header */}
@@ -43,7 +48,7 @@ export default function AppSelector() {
         <h1 className="text-2xl md:text-3xl font-bold text-slate-900">
           Bienvenue au tableau de bord <span className="text-[#E24218]">texion.app</span>
         </h1>
-        <p className="text-slate-500 mt-2">
+        <p className="text-slate-500 mt-2 text-lg md:text-xl">
           Accédez à vos outils en un clic.
         </p>
       </header>
@@ -68,7 +73,15 @@ export default function AppSelector() {
 
       {/* Footer */}
       <footer className="text-center text-slate-400 text-sm pb-8">
-        TEXION — Votre partenaire en excellence manufacturière
+        <p className="text-lg md:text-xl mb-2">TEXION — Votre partenaire en excellence manufacturière</p>
+        © 2025 TEXION. Tous droits réservés.
+        <Button
+          variant="link"
+          className="text-slate-400 hover:text-[#E24218] text-xs mt-2"
+          onClick={handleLogout}
+        >
+          <LogOut className="h-4 w-4 mr-1" /> Logout
+        </Button>
       </footer>
     </div>
   );

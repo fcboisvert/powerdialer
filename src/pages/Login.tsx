@@ -11,28 +11,28 @@ export default function Login() {
 
   function handleLogin(e: React.FormEvent) {
     e.preventDefault();
-    if (!user || !pass) {
+    const trimmedUser = user.trim();
+    const trimmedPass = pass.trim();
+    if (!trimmedUser || !trimmedPass) {
       setError("Veuillez remplir tous les champs.");
       return;
     }
     setError("");
-    localStorage.setItem("texion_agent", user.trim());
+    localStorage.setItem("texion_agent", trimmedUser);
     navigate("/select");
   }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#f8fafc] via-[#fff] to-[#f3f4f6] py-12">
-      <div className="rounded-2xl shadow-2xl bg-white/95 px-8 py-12 w-full max-w-lg flex flex-col items-center">
-        {/* Logo crop */}
-        <div className="h-[80px] overflow-hidden mb-6">
-          <img
-            src={Logo}
-            alt="texion"
-            className="w-[260px] object-contain mx-auto"
-          />
-        </div>
+      <div className="rounded-2xl shadow-xl bg-white px-10 py-12 w-full max-w-md flex flex-col items-center">
+        {/* Logo clean and centered */}
+        <img
+          src={Logo}
+          alt="Texion Logo"
+          className="h-14 w-auto mb-8"
+        />
 
-        <h2 className="text-2xl font-bold text-slate-900 mb-1">
+        <h2 className="text-2xl font-bold text-slate-900 mb-1 text-center">
           Connexion au portail texion.app
         </h2>
         <p className="text-slate-500 mb-6 text-center">
@@ -50,8 +50,10 @@ export default function Login() {
               value={user}
               onChange={(e) => setUser(e.target.value)}
               placeholder="Entrez votre nom d'utilisateur"
-              className="w-full rounded-xl border border-slate-300 px-4 py-3 text-base bg-slate-50 focus:border-[#E24218] focus:outline-none"
+              className="w-full rounded-xl border border-slate-300 px-4 py-3 text-base bg-slate-50 focus:border-[#E24218] focus:outline-none transition-all"
               required
+              aria-invalid={!!error}
+              aria-describedby={error ? "login-error" : undefined}
             />
           </div>
           <div>
@@ -64,16 +66,22 @@ export default function Login() {
               value={pass}
               onChange={(e) => setPass(e.target.value)}
               placeholder="Entrez votre mot de passe"
-              className="w-full rounded-xl border border-slate-300 px-4 py-3 text-base bg-slate-50 focus:border-[#E24218] focus:outline-none"
+              className="w-full rounded-xl border border-slate-300 px-4 py-3 text-base bg-slate-50 focus:border-[#E24218] focus:outline-none transition-all"
               required
+              aria-invalid={!!error}
+              aria-describedby={error ? "login-error" : undefined}
             />
           </div>
 
-          {error && <div className="text-red-600 text-sm text-center">{error}</div>}
+          {error && (
+            <div id="login-error" role="alert" className="text-red-600 text-sm text-center animate-in fade-in duration-300">
+              {error}
+            </div>
+          )}
 
           <Button
             type="submit"
-            className="w-full bg-[#E24218] hover:bg-[#d03d15] text-white font-bold h-12 text-base rounded-xl shadow-lg transition-all mt-2"
+            className="w-full bg-[#E24218] hover:bg-[#d03d15] text-white font-bold h-12 text-base rounded-xl shadow-lg transition-all mt-2 hover:scale-105"
           >
             Se connecter
           </Button>
