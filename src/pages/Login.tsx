@@ -3,14 +3,6 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import Logo from "/texion-logo.svg";
 
-<div className="h-[80px] overflow-hidden mb-6">
-  <img
-    src="/texion-logo.svg"
-    alt="texion"
-    className="w-[280px] object-contain"
-  />
-</div>
-
 export default function Login() {
   const [user, setUser] = useState("");
   const [pass, setPass] = useState("");
@@ -29,19 +21,24 @@ export default function Login() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#f8fafc] via-[#fff] to-[#f3f4f6]">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#f8fafc] via-[#fff] to-[#f3f4f6] py-12">
       <div className="rounded-2xl shadow-2xl bg-white/95 px-8 py-12 w-full max-w-lg flex flex-col items-center">
-        <img
-          src={Logo}
-          alt="texion"
-          className="w-[260px] max-w-full h-auto mb-8 mt-2 object-contain"
-        />
+        {/* Logo crop */}
+        <div className="h-[80px] overflow-hidden mb-6">
+          <img
+            src={Logo}
+            alt="texion"
+            className="w-[260px] object-contain mx-auto"
+          />
+        </div>
+
         <h2 className="text-2xl font-bold text-slate-900 mb-1">
           Connexion au portail texion.app
         </h2>
         <p className="text-slate-500 mb-6 text-center">
           Accédez à vos outils d'excellence manufacturière.
         </p>
+
         <form onSubmit={handleLogin} className="w-full flex flex-col gap-4">
           <div>
             <label className="block font-semibold text-slate-700 mb-1" htmlFor="user">
@@ -71,7 +68,9 @@ export default function Login() {
               required
             />
           </div>
+
           {error && <div className="text-red-600 text-sm text-center">{error}</div>}
+
           <Button
             type="submit"
             className="w-full bg-[#E24218] hover:bg-[#d03d15] text-white font-bold h-12 text-base rounded-xl shadow-lg transition-all mt-2"
@@ -79,6 +78,7 @@ export default function Login() {
             Se connecter
           </Button>
         </form>
+
         <footer className="mt-8 text-center text-slate-400 text-xs">
           © 2025 TEXION. Tous droits réservés.
         </footer>
