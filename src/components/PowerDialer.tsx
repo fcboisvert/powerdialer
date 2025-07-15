@@ -6,7 +6,8 @@
 // 3. startPollingOutcome(callId) helper
 // 4. clearPollingOutcome() helper called from hang, save, next
 // -----------------------------------------------------------------------------
-
+import { mapRawOutcomeToCallResult } from "@/utils/mapOutcome";
+import type { RawOutcome } from "@/types/dialer";
 import React, { useEffect, useState, useRef } from "react";
 import type { CallRecord } from "@/types/dialer";
 import { Button } from "@/components/ui/button";
@@ -23,21 +24,7 @@ import Logo from "/texion-logo.svg";
 import ResultForm from "@/components/dialer/ResultForm";
 import { useNavigate } from "react-router-dom";
 
-type CallResult =
-  | "S_O"
-  | "Rencontre_Expl._Planifiee"
-  | "Rencontre_Besoin_Planifiee"
-  | "Visite_Planifiee"
-  | "Offre_Planifiee"
-  | "Touchbase_Planifiee"
-  | "Relancer_Dans_X"
-  | "Info_Par_Courriel"
-  | "Boite_Vocale"
-  | "Pas_Joignable"
-  | "Pas_Interesse"
-  | "Demande_Lien_Booking"
-  | "Me_Refere_Interne"
-  | "Me_Refere_Externe";
+import type { CallResult } from "@/types/dialer";
 
 // === CONSTANTS ===
 const STUDIO_API_URL = "https://texion.app/api/studio";
@@ -101,28 +88,34 @@ export default function PowerDialer() {
       if (attempts++ > 10) { // ~40s timeout
         clearInterval(pollRef.current!);
         return;
-      }
-      try {
-        const res = await fetch(`${OUTCOME_POLL_URL}?callId=${callId}`);
-        if (!res.ok) return;
-        const data = await res.json();
-        if (data?.outcome) {
-          clearInterval(pollRef.current!);
-          const OUTCOME_MAP: Record<string, string> = {
-            Répondeur: "Boite_Vocale",
-              Pas_Joignable: "Pas_Joignable",
-          };
 
-          const mapped = OUTCOME_MAP[data.outcome] ?? "S_O"; // fallback default
+try {
+  const res = await fetch(`${OUTCOME_POLL_URL}?callId=${callId}`);
+  if (!res.ok) return;
 
-          setCallResult(mapped);
-          setCallState(CALL_STATES.COMPLETED);
-          setStatus(`📞 ${mapped === "Boite_Vocale" ? "Boîte vocale" : mapped}`);
-          setShowForm(true);
-        }
-      } catch (_) {}
-    }, 4000);
-  };
+  const data: { outcome?: string } = await res.json();
+  if (
+    data?.outcome &&
+    ["Répondeur", "Pas_Joignable", "Répondu_Humain"].includes(data.outcome)
+  ) {
+    clearInterval(pollRef.current!);
+
+    const outcome = data.outcome as RawOutcome;
+    const mapped = mapRawOutcomeToCallResult(outcome);
+    if (mapped) {
+      setCallResult(mapped);
+      setCallState(CALL_STATES.COMPLETED);
+      setStatus(`📞 ${mapped === "Boite_Vocale" ? "Boîte vocale" : mapped}`);
+    } else {
+      setStatus("✅ Répondu (suivi manuel requis)");
+    }
+
+    setShowForm(true);
+  }
+} catch (err) {
+  console.error("Polling error:", err);
+}
+
 
   const clearPollingOutcome = () => {
     if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
@@ -183,7 +176,7 @@ export default function PowerDialer() {
     setCallState(CALL_STATES.TRIGGERING_FLOW);
     setStatus(`🚀 Déclenchement du flow pour ${to}…`);
     setShowForm(false);
-    setCallResult("");
+    setCallResult("S_O");
     setCallNotes("");
     try {
       const callId =
@@ -210,8 +203,8 @@ export default function PowerDialer() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      const json = await res.json();
-      if (!json.success) throw new Error(json.error || "API error");
+      const json: { success: boolean; executionSid?: string; error?: string } = await res.json();
+      if (!json.success || !json.executionSid) throw new Error(json.error || "API error");
       setCurrentExecutionSid(json.executionSid);
       setStatus(`📞 Flow déclenché – ex ${json.executionSid.slice(-6)}`);
       setCallState(CALL_STATES.WAITING_OUTCOME);
@@ -268,7 +261,7 @@ export default function PowerDialer() {
     }
     clearPollingOutcome();
     setIdx((i) => (i + 1 < records.length ? i + 1 : i));
-    setCallResult("");
+    setCallResult("S_O");
     setCallNotes("");
     setMeetingNotes("");
     setMeetingDatetime("");
@@ -279,7 +272,7 @@ export default function PowerDialer() {
   };
 
   const saveAndNext = async () => {
-    if (!callResult) {
+    if (callResult === "S_O") {
       setStatus("❌ Sélectionnez un résultat d'appel");
       return;
     }
@@ -563,4 +556,4 @@ function Action({
     </Button>
   );
 }
-
+ // ✅ This closes cleanly with no red underline
