@@ -34,7 +34,8 @@ import type { CallResult } from "@/types/dialer";
 // === CONSTANTS ===
 const STUDIO_API_URL = "https://texion.app/api/studio";
 const FLOW_SID = "FW52d9007999380cfbb435838d0733e84c";
-const QUEUE_API_URL = "https://texion.app/api/queue";
+// Worker runs on the same origin as the app once deployed on Pages
+const QUEUE_API_URL = "/api/queue";
 const AIRTABLE_UPDATE_URL = "https://texion.app/api/airtable/update-result";
 // >>> new endpoint that simply reads KV by callId
 const OUTCOME_POLL_URL = "https://texion.app/api/outcome";
@@ -160,7 +161,8 @@ const clearPollingOutcome = () => {
   useEffect(() => {
     const fetchQueue = async () => {
       try {
-        const res = await fetch(QUEUE_API_URL);
+        const agent = localStorage.getItem("texion_agent")?.toLowerCase() || "";
+        const res = await fetch(`${QUEUE_API_URL}?agent=${agent}`);
         if (!res.ok) throw new Error("Failed to fetch queue");
         const data: CallRecord[] = await res.json();
         setRecords(data);
