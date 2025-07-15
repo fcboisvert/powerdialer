@@ -81,45 +81,53 @@ export default function PowerDialer() {
   // ------------------------------------------------------------------
   // Helper to start polling KV for outcome until we get it or timeout
   // ------------------------------------------------------------------
-  const startPollingOutcome = (callId: string) => {
-    let attempts = 0;
-    if (pollRef.current) clearInterval(pollRef.current);
-    pollRef.current = setInterval(async () => {
-      if (attempts++ > 10) { // ~40s timeout
-        clearInterval(pollRef.current!);
-        return;
+  
+const startPollingOutcome = (callId: string) => {
+  let attempts = 0;
+  if (pollRef.current) clearInterval(pollRef.current);
 
-try {
-  const res = await fetch(`${OUTCOME_POLL_URL}?callId=${callId}`);
-  if (!res.ok) return;
-
-  const data: { outcome?: string } = await res.json();
-  if (
-    data?.outcome &&
-    ["Répondeur", "Pas_Joignable", "Répondu_Humain"].includes(data.outcome)
-  ) {
-    clearInterval(pollRef.current!);
-
-    const outcome = data.outcome as RawOutcome;
-    const mapped = mapRawOutcomeToCallResult(outcome);
-    if (mapped) {
-      setCallResult(mapped);
-      setCallState(CALL_STATES.COMPLETED);
-      setStatus(`📞 ${mapped === "Boite_Vocale" ? "Boîte vocale" : mapped}`);
-    } else {
-      setStatus("✅ Répondu (suivi manuel requis)");
+  pollRef.current = setInterval(async () => {
+    if (attempts++ > 10) {
+      clearInterval(pollRef.current!);
+      return;
     }
 
-    setShowForm(true);
+    try {
+      const res = await fetch(`${OUTCOME_POLL_URL}?callId=${callId}`);
+      if (!res.ok) return;
+
+      const data: { outcome?: string } = await res.json();
+      if (
+        data?.outcome &&
+        ["Répondeur", "Pas_Joignable", "Répondu_Humain"].includes(data.outcome)
+      ) {
+        clearInterval(pollRef.current!);
+
+        const outcome = data.outcome as RawOutcome;
+        const mapped = mapRawOutcomeToCallResult(outcome);
+
+        if (mapped) {
+          setCallResult(mapped);
+          setCallState(CALL_STATES.COMPLETED);
+          setStatus(`📞 ${mapped === "Boite_Vocale" ? "Boîte vocale" : mapped}`);
+        } else {
+          setStatus("✅ Répondu (suivi manuel requis)");
+        }
+
+        setShowForm(true);
+      }
+    } catch (err) {
+      console.error("Polling error:", err);
+    }
+  }, 4000);
+};
+
+const clearPollingOutcome = () => {
+  if (pollRef.current) {
+    clearInterval(pollRef.current);
+    pollRef.current = null;
   }
-} catch (err) {
-  console.error("Polling error:", err);
-}
-
-
-  const clearPollingOutcome = () => {
-    if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
-  };
+};
 
   // ------------------------------------------------------------------
   // Fetch queue
@@ -556,4 +564,4 @@ function Action({
     </Button>
   );
 }
- // ✅ This closes cleanly with no red underline
+
