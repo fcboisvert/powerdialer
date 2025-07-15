@@ -5,7 +5,8 @@
  */
 
 interface Env {
-  AIRTABLE_TOKEN: string;
+  AIRTABLE_READ_TOKEN: string;
+  AIRTABLE_WRITE_TOKEN: string;
   AIRTABLE_BASE: string;
   AIRTABLE_TABLE: string;
 }
@@ -18,7 +19,7 @@ const CORS_HEADERS = {
 
 const FIELD_KEYS = {
   fullName: "Full Name",
-  priority: "Priorité",
+  priority: "Priorité",  // Confirm exact name in Airtable (with/without accent)
   mobile: "Mobile Phone",
   direct: "Direct Phone",
   company: "Company Phone",
@@ -28,7 +29,7 @@ const FIELD_KEYS = {
 
 const VIEW_MAP: Record<string, string> = {
   "Simon McConnell": "To Call View - simon",
-  "Frédéric-Charles Boisvert": "To Call View - frederic",
+  "Frédéric-Charles Boisvert": "To Call View - frederic",  // Confirm exact view name (add accent if needed, e.g., "To Call View - Frédéric")
 };
 
 type AirtableRecord = {
@@ -50,15 +51,15 @@ export const onRequest: PagesFunction<Env> = async ({ request, env }) => {
 
     const view = VIEW_MAP[agent];
     const baseUrl = `https://api.airtable.com/v0/${env.AIRTABLE_BASE}/${encodeURIComponent(env.AIRTABLE_TABLE)}`;
-    const query = `?view=${encodeURIComponent(view)}&sort[0][field]=${encodeURIComponent(FIELD_KEYS.priority)}&sort[0][direction]=asc`;
+    const query = `?view=${encodeURIComponent(view)}`;  // Removed sort for debugging; add back if needed: &sort[0][field]=${encodeURIComponent(FIELD_KEYS.priority)}&sort[0][direction]=asc
 
     try {
-      const records = await fetchAllAirtable(`${baseUrl}${query}`, env.AIRTABLE_TOKEN);
+      const records = await fetchAllAirtable(`${baseUrl}${query}`, env.AIRTABLE_READ_TOKEN);
       const leads = records.map(mapAirtableRecord);
       return respond(leads, 200);
     } catch (err) {
       console.error("Airtable GET error:", err);
-      return respond({ error: "Failed to fetch queue" }, 502);
+      return respond({ error: "Failed to fetch queue", details: String(err) }, 502);
     }
   }
 
@@ -82,7 +83,7 @@ export const onRequest: PagesFunction<Env> = async ({ request, env }) => {
       const res = await fetch(patchUrl, {
         method: "PATCH",
         headers: {
-          Authorization: `Bearer ${env.AIRTABLE_TOKEN}`,
+          Authorization: `Bearer ${env.AIRTABLE_WRITE_TOKEN}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify(patchBody),

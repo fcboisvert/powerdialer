@@ -1,3 +1,4 @@
+// C:\Users\Frédéric-CharlesBois\projects\Powerdialer\src\components\PowerDialer.tsx
 import React, { useEffect, useState } from "react";
 import type { CallRecord } from "@/types/dialer";
 import { Button } from "@/components/ui/button";
@@ -18,6 +19,7 @@ import { useNavigate } from "react-router-dom";
 const STUDIO_API_URL = "https://texion.app/api/studio";
 const FLOW_SID = "FW236e663e008973ab36cbfcdc706b6d97";
 const QUEUE_API_URL = "https://texion.app/api/queue";
+const AIRTABLE_API_URL = "https://texion.app/api/airtable";
 const AGENT_CALLER_IDS: Record<string, string[]> = {
   "Frédéric-Charles Boisvert": ["+14388178171"],
   "Simon McConnell": ["+14388178177"],
@@ -34,59 +36,11 @@ const CALL_STATES = {
   COMPLETED: "completed",
   ERROR: "error",
 } as const;
-function Field({ label, value }: { label: string; value: string }) {
-  if (
-    (label === "LinkedIn" || label === "LinkedIn_URL") &&
-    value !== "—" &&
-    value.includes("linkedin.com")
-  ) {
-    return (
-      <p className="flex">
-        <span className="w-40 shrink-0 font-medium text-zinc-500">{label} :</span>
-        <a
-          href={value}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-blue-600 hover:text-blue-800 underline"
-        >
-          Voir profil LinkedIn
-        </a>
-      </p>
-    );
-  }
-
-  if (
-    (label.includes("Phone") || label.includes("Téléphone")) &&
-    value !== "—" &&
-    typeof value === "string"
-  ) {
-    const digits = value.replace(/\D/g, "");
-    let formatted = value.trim();
-
-    if (digits.length === 10) {
-      formatted = digits.replace(/(\d{3})(\d{3})(\d{4})/, "($1) $2-$3");
-    } else if (digits.length === 11 && digits.startsWith("1")) {
-      formatted = digits.replace(/1(\d{3})(\d{3})(\d{4})/, "+1 ($1) $2-$3");
-    }
-
-    return (
-      <p className="flex">
-        <span className="w-40 shrink-0 font-medium text-zinc-500">{label} :</span>
-        <span className="text-zinc-800 font-mono">{formatted}</span>
-      </p>
-    );
-  }
-
-  return (
-    <p className="flex">
-      <span className="w-40 shrink-0 font-medium text-zinc-500">{label} :</span>
-      <span className="text-zinc-800">{value}</span>
-    </p>
-  );
-}
 
 export default function PowerDialer() {
   const navigate = useNavigate();
+
+  // === STATE ===
   const [records, setRecords] = useState<CallRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState("Chargement des contacts…");
@@ -128,101 +82,117 @@ export default function PowerDialer() {
     })();
   }, [agent]);
 
- const dial = async () => {
-  if (callState !== CALL_STATES.IDLE) {
-    setStatus("Opération en cours…");
-    return;
-  }
+  // === LOGIC FUNCTIONS ===
+  const dial = async () => {
+    if (callState !== CALL_STATES.IDLE) {
+      setStatus("Opération en cours…");
+      return;
+    }
+    const raw =
+      get(current, "Mobile_Phone") ||
+      get(current, "Direct_Phone") ||
+      get(current, "Company_Phone");
+    if (!raw || raw === "—") return setStatus("Aucun numéro valide !");
+    if (!callerId) return setStatus("Sélectionnez un Caller ID !");
+    const digits = raw.replace(/\D/g, "");
+    const to =
+      digits.length === 10
+        ? `+1${digits}`
+        : digits.length === 11 && digits.startsWith("1")
+        ? `+${digits}`
+        : raw.startsWith("+")
+        ? raw
+        : null;
+    if (!to || !/^\+\d{10,15}$/.test(to)) {
+      setStatus("Numéro de destination invalide !");
+      return;
+    }
+    if (!/^\+\d{10,15}$/.test(callerId)) {
+      setStatus("Numéro sortant invalide !");
+      return;
+    }
+    setCallState(CALL_STATES.TRIGGERING_FLOW);
+    setStatus(`🚀 Déclenchement du flow pour ${to}…`);
+    setShowForm(false);
+    setCallResult("");
+    setCallNotes("");
+    try {
+      const callId =
+        typeof crypto.randomUUID === "function"
+          ? crypto.randomUUID()
+          : Date.now().toString();
 
-  const raw =
-    get(current, "Mobile_Phone") ||
-    get(current, "Direct_Phone") ||
-    get(current, "Company_Phone");
-  if (!raw || raw === "—") return setStatus("Aucun numéro valide !");
-  if (!callerId) return setStatus("Sélectionnez un Caller ID !");
-  const digits = raw.replace(/\D/g, "");
-  const to =
-    digits.length === 10
-      ? `+1${digits}`
-      : digits.length === 11 && digits.startsWith("1")
-      ? `+${digits}`
-      : raw.startsWith("+")
-      ? raw
-      : null;
-  if (!to || !/^\+\d{10,15}$/.test(to)) {
-    setStatus("Numéro de destination invalide !");
-    return;
-  }
-  if (!/^\+\d{10,15}$/.test(callerId)) {
-    setStatus("Numéro sortant invalide !");
-    return;
-  }
-
-  const callId = typeof crypto.randomUUID === "function" ? crypto.randomUUID() : Date.now().toString();
-  (current as any).id = callId;
-
-  // ✅ show form right away
-  setCallState(CALL_STATES.FLOW_ACTIVE); // assume in-progress
-  setShowForm(true);
-  setCallResult("");
-  setCallNotes("");
-  setMeetingNotes("");
-  setMeetingDatetime("");
-  setStatus(`🚀 Déclenchement du flow pour ${to}…`);
-
-  try {
-    const payload = {
-      to,
-      from: callerId,
-      parameters: {
-        callId,
-        leadName: get(current, "Full_Name"),
-        company: get(current, "Nom_de_la_compagnie"),
-        activity: get(current, "Activité 2.0 H.C."),
-        agent,
-        activityName: get(current, "Nom_de_l_Activite"),
-      },
-    };
-    const res = await fetch(`${STUDIO_API_URL}/create-execution`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    const json = await res.json();
-    if (!json.success) throw new Error(json.error || "API error");
-    setCurrentExecutionSid(json.executionSid);
-    setStatus(`📞 Flow déclenché – ex ${json.executionSid.slice(-6)}`);
-  } catch (err: any) {
-    setCallState(CALL_STATES.ERROR);
-    setStatus(`❌ Erreur : ${err.message}`);
-  }
-};
-
-
-    const simulate = async () => {
-      if (callState !== CALL_STATES.IDLE) return setStatus("Appel en cours…");
-
-      setCallState(CALL_STATES.TRIGGERING_FLOW);
-      setStatus("🎭 Simulation d'appel...");
-      setShowForm(false);
-
-      const callId = typeof crypto.randomUUID === "function" ? crypto.randomUUID() : Date.now().toString();
       (current as any).id = callId;
 
-      setTimeout(async () => {
-        setCallState(CALL_STATES.COMPLETED);
-        setCallResult("Boite_Vocale");
-        setStatus("📞 Simulation - Boîte vocale");
-        setTimeout(() => next(), 2000);
-      }, 3000);
-    };
+      const payload = {
+        to,
+        from: callerId,
+        parameters: {
+          callId,
+          leadName: get(current, "Full_Name"),
+          company: get(current, "Nom_de_la_compagnie"),
+          activity: get(current, "Activité 2.0 H.C."),
+          agent,
+          activityName: get(current, "Nom_de_l_Activite"),
+        },
+      };
+      const res = await fetch(`${STUDIO_API_URL}/create-execution`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const json = await res.json();
+      if (!json.success) throw new Error(json.error || "API error");
+      setCurrentExecutionSid(json.executionSid);
+      setStatus(`📞 Flow déclenché – ex ${json.executionSid.slice(-6)}`);
+    } catch (err: any) {
+      setCallState(CALL_STATES.ERROR);
+      setStatus(`❌ Erreur : ${err.message}`);
+    }
+  };
 
-    const hang = () => {
+  const hang = async () => {
+    if (currentExecutionSid) {
+      try {
+        await fetch(`${STUDIO_API_URL}/end-execution`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            flowSid: FLOW_SID,
+            executionSid: currentExecutionSid,
+          }),
+        });
+      } catch (error) {
+        setStatus(`❌ Erreur lors de l'arrêt : ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+    setCurrentExecutionSid(null);
+    setCallState(CALL_STATES.IDLE);
+    setShowForm(false);
+    setStatus("📞 Opération annulée");
+  };
+
+  const simulate = () => {
+    if (callState !== CALL_STATES.IDLE) return setStatus("Appel en cours…");
+    setCallState(CALL_STATES.TRIGGERING_FLOW);
+    setStatus("🎭 Simulation d'appel...");
+    setShowForm(false);
+
+    const callId =
+      typeof crypto.randomUUID === "function"
+        ? crypto.randomUUID()
+        : Date.now().toString();
+
+    (current as any).id = callId;
+
+    setTimeout(() => {
       setCallState(CALL_STATES.COMPLETED);
-      setShowForm(true);
-      setStatus("📞 Appel terminé. Veuillez enregistrer le résultat.");
-    };
-
+      setCallResult("Boite_Vocale");
+      updateCallResult("Boite_Vocale", "Simulation - Message laissé");
+      setStatus("📞 Simulation - Boîte vocale");
+      setTimeout(() => next(), 2000);
+    }, 3000);
+  };
 
   const next = () => {
     if (callState !== CALL_STATES.IDLE && callState !== CALL_STATES.COMPLETED) {
@@ -239,173 +209,130 @@ export default function PowerDialer() {
     setStatus("➡️ Contact suivant");
   };
 
-const saveAndNext = async () => {
-  if (
-    callResult.toLowerCase().includes("planifiee") &&
-    (!meetingDatetime || meetingDatetime.trim() === "")
+  const saveAndNext = async () => {
+    if (!callResult) {
+      setStatus("❌ Sélectionnez un résultat d'appel");
+      return;
+    }
+    setStatus("💾 Sauvegarde en cours...");
+    await updateCallResult(callResult, callNotes, meetingNotes, meetingDatetime);
+    setMeetingNotes("");
+    setMeetingDatetime("");
+    setCallState(CALL_STATES.IDLE);
+    setStatus("✅ Résultat sauvegardé");
+    setTimeout(() => next(), 1000);
+  };
+
+  async function updateCallResult(
+    result: string,
+    notes: string,
+    meetingNotes?: string,
+    meetingDatetime?: string
   ) {
-    setStatus("❌ Entrez la date et l'heure pour cette activité planifiée.");
-    return;
+    const payload = {
+      outcome: result === "Boite_Vocale" ? "Répondeur" : result === "Pas_Joignable" ? "Pas_Joignable" : result,
+      number:
+        get(current, "Mobile_Phone") ||
+        get(current, "Direct_Phone") ||
+        get(current, "Company_Phone"),
+      activity: get(current, "Nom_de_l_Activite"),
+      callId: current?.id || "unknown-call-id",
+      agent,
+      script: get(current, "Script_Appel"),
+    };
+
+    if (["Boite_Vocale", "Pas_Joignable"].includes(result)) {
+      try {
+        const res = await fetch("https://texion.app/api/call-outcome", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        if (!res.ok) throw new Error("Call outcome API failed");
+        console.log("✅ API logged:", result);
+      } catch (err: any) {
+        console.error("❌ API call-outcome error:", err.message);
+      }
+    } else {
+      console.log("📝 Saving manually filled outcome:", {
+        result,
+        notes,
+        meetingNotes,
+        meetingDatetime,
+      });
+      // TODO: Airtable update logic (if applicable)
+    }
   }
 
-  setStatus("💾 Sauvegarde en cours...");
-  await updateCallResult(callResult, callNotes, meetingNotes, meetingDatetime);
-  setMeetingNotes("");
-  setMeetingDatetime("");
-  setCallState(CALL_STATES.IDLE);
-  setStatus("✅ Résultat sauvegardé");
-  setTimeout(() => next(), 1000);
-};
+  const logout = () => {
+    if (callState !== CALL_STATES.IDLE) {
+      if (!window.confirm("Un appel est en cours. Quitter ?")) return;
+    }
+    localStorage.removeItem("texion_agent");
+    setTimeout(() => {
+      navigate("/", { replace: true });
+    }, 100);
+  };
 
+  // === UI RENDER ===
+  if (loading)
+    return <p className="p-10 text-center">{status}</p>;
+  if (records.length === 0)
+    return <p className="p-10 text-center">Aucun contact à appeler 👍</p>;
 
-const updateCallResult = async (
-  result: string,
-  notes: string,
-  meetingNotes?: string,
-  meetingDatetime?: string
-) => {
-  const payload = {
-  recordId: current?.id,
-  activityName: get(current, "Nom_de_l_Activite"),
-  result,
-  notes,
-  agent,
-  meetingNotes,
-  meetingDatetime,
-  statut: "Fait", // ✅ update activity status to “Fait”
-};
-
-
-  try {
-    const json = await sendAirtableUpdate(payload);
-    console.log("✅ Airtable update-result success:", json);
-  } catch (err: any) {
-    console.error("❌ Erreur update-result:", err.message);
-  }
-};
-
-const logout = () => {
-  if (callState !== CALL_STATES.IDLE) {
-    if (!window.confirm("Un appel est en cours. Quitter ?")) return;
-  }
-  localStorage.removeItem("texion_agent");
-  setTimeout(() => navigate("/", { replace: true }), 100);
-};
-
- const sendAirtableUpdate = async (body: any) => {
-  const res = await fetch("/api/airtable/update-result", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  const json = await res.json();
-  if (!res.ok || !json.success) throw new Error(json?.message || "Airtable update failed");
-  return json;
-};
-
-  if (loading) return <p className="p-10 text-center">{status}</p>;
-  if (records.length === 0) return <p className="p-10 text-center">Aucun contact à appeler 👍</p>;
-
-  function Action({
-  icon: Icon,
-  children,
-  ...props
-}: React.ComponentProps<typeof Button> & { icon: any }) {
   return (
-    <Button
-      className="gap-2 bg-[#E24218] hover:bg-[#d03d15] text-white font-bold h-10 text-sm rounded-xl px-4 py-2 shadow-lg transition-all"
-      {...props}
-    >
-      <Icon className="w-4 h-4" />
-      {children}
-    </Button>
-  );
-}
-
-return (
-  <div className="min-h-screen flex flex-col bg-gradient-to-br from-[#f8fafc] via-[#fff] to-[#f3f4f6]">
-    <div className="w-full px-4 sm:px-6 lg:px-8 pt-8">
-      <div className="max-w-5xl mx-auto rounded-2xl shadow-xl bg-white/95 px-6 sm:px-10 py-10">
-        {/* Header */}
-        <div className="flex justify-between items-center mb-8">
-          <div className="h-[80px] overflow-hidden">
-            <img src={Logo} alt="texion" className="w-[220px] object-contain" />
-          </div>
-          <div className="text-right text-sm">
-            <p className="text-slate-500">
-              {idx + 1}/{records.length} — Agent :{" "}
-              <span className="font-semibold">{agent.split(" ")[0].toUpperCase()}</span>
-            </p>
-            <p className="text-green-600 font-medium text-xs">● Live depuis Airtable</p>
-          </div>
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#f8fafc] via-[#fff] to-[#f3f4f6]">
+      <div className="rounded-2xl shadow-2xl bg-white/95 px-8 py-12 w-full max-w-3xl flex flex-col items-center">
+        <header className="flex flex-col items-center w-full mb-8">
+          <img src={Logo} alt="texion" className="w-full h-[100px] mb-3" style={{ objectFit: "contain" }} />
+          <h1 className="text-2xl font-bold text-slate-900 mb-1">POWER DIALER TEXION</h1>
+          <span className="text-xs font-medium text-slate-500">
+            {idx + 1}/{records.length} — Agent : {agent.split(" ")[0].toUpperCase()}
+          </span>
+        </header>
+        <div className="flex items-center gap-2 text-sm">
+          <span className="inline-block w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+          <span className="font-medium text-green-700">Live depuis Airtable</span>
         </div>
-
-        {/* Caller ID selector */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 gap-4">
-          <div className="flex items-center text-sm gap-2">
-            <span className="font-medium">Numéro sortant :</span>
-            <select
-              className="border rounded px-2 py-1 text-sm"
-              value={callerId}
-              onChange={(e) => setCallerId(e.target.value)}
-            >
-              {(AGENT_CALLER_IDS[agent] || []).map((id) => (
-                <option key={id}>{id}</option>
-              ))}
-            </select>
-          </div>
-          <div
-            className={`rounded px-3 py-2 text-sm font-medium border ${
-              callState === CALL_STATES.TRIGGERING_FLOW
-                ? "bg-blue-50 border-blue-300 text-blue-800"
-                : callState === CALL_STATES.COMPLETED
-                ? "bg-green-50 border-green-300 text-green-800"
-                : callState === CALL_STATES.ERROR
-                ? "bg-red-50 border-red-300 text-red-800"
-                : "bg-zinc-50 border-zinc-200 text-zinc-800"
-            }`}
+        <div className="flex items-center gap-2 text-sm">
+          <span className="font-medium">Numéro sortant :</span>
+          <select
+            className="border rounded px-2 py-1 text-sm"
+            value={callerId}
+            onChange={(e) => setCallerId(e.target.value)}
           >
-            Statut : {status}
-          </div>
+            {(AGENT_CALLER_IDS[agent] || []).map((id) => (
+              <option key={id} value={id}>
+                {id}
+              </option>
+            ))}
+          </select>
         </div>
-
-        {/* Prospect + Activity Grid */}
         <div className="grid md:grid-cols-2 gap-6 text-sm">
-          <div className="space-y-4">
-            <div className="border border-slate-200 bg-slate-50 rounded-lg p-4">
+          <div>
+            <div className="w-full mb-6 p-4 bg-slate-50 rounded-xl border border-slate-200 text-sm">
               <h4 className="font-semibold text-slate-700 mb-2">📜 Script d'appel</h4>
-              <p className="text-zinc-800 whitespace-pre-line text-sm">
-                {get(current, "Script_Appel")}
-              </p>
+              <p className="text-zinc-800 whitespace-pre-line">{get(current, "Script_Appel")}</p>
             </div>
-
-            <div className="space-y-1">
-              <h3 className="text-base font-semibold text-zinc-800">Infos Prospect</h3>
-              <Field label="Nom" value={get(current, "Full_Name")} />
-              <Field label="Fonction" value={get(current, "Job_Title")} />
-              <Field label="Entreprise" value={get(current, "Nom_de_la_compagnie")} />
-              <Field label="LinkedIn" value={get(current, "LinkedIn_URL")} />
-              <Field label="Téléphone mobile" value={get(current, "Mobile_Phone")} />
-              <Field label="Téléphone direct" value={get(current, "Direct_Phone")} />
-              <Field label="Téléphone entreprise" value={get(current, "Company_Phone")} />
-            </div>
+            <h3 className="mb-2 font-semibold text-zinc-800">Infos Prospect</h3>
+            <Field label="Nom" value={get(current, "Full_Name")} />
+            <Field label="Fonction" value={get(current, "Job_Title")} />
+            <Field label="Entreprise" value={get(current, "Nom_de_la_compagnie")} />
+            <Field label="LinkedIn" value={get(current, "LinkedIn_URL")} />
+            <Field label="Téléphone mobile" value={get(current, "Mobile_Phone")} />
+            <Field label="Téléphone direct" value={get(current, "Direct_Phone")} />
+            <Field label="Téléphone entreprise" value={get(current, "Company_Phone")} />
           </div>
-
-          <div className="space-y-1 pt-[36px]">
-            <h3 className="text-base font-semibold text-zinc-800">Infos Activité</h3>
+          <div>
             <Field label="Nom de l’activité" value={get(current, "Nom_de_l_Activite")} />
-            <Field label="Type d’Activité" value={get(current, "Activité 2.0 H.C.")} />
-            <Field label="Responsable de l’Activité" value={agent} />
             <Field label="Priorité" value={get(current, "Priorite")} />
+            <Field label="Date / Heure" value={get(current, "Date_et_Heure_Rencontre")} />
             <Field label="Statut" value={get(current, "Statut_de_l_Activite", "À Faire")} />
             <Field label="Notes liées" value={get(current, "Linked_Notes")} />
-            <Field label="Date / Heure" value={get(current, "Date_et_Heure_Rencontre")} />
           </div>
         </div>
-
-        {/* Status display */}
         <div
-          className={`rounded-md px-4 py-3 text-sm ring-1 mt-6 ${
+          className={`rounded-md px-4 py-3 text-sm ring-1 ${
             callState === CALL_STATES.TRIGGERING_FLOW
               ? "bg-blue-50 ring-blue-200 text-blue-800"
               : callState === CALL_STATES.FLOW_ACTIVE
@@ -432,28 +359,42 @@ return (
             <span>Statut : {status}</span>
           </div>
         </div>
-
-        {/* Call actions */}
-        <div className="flex flex-wrap justify-center gap-3 pt-4">
-          <Action icon={Phone} onClick={dial} disabled={callState !== CALL_STATES.IDLE}>
+        <div className="flex flex-wrap justify-center gap-3 pt-2">
+          <Action
+            icon={Phone}
+            onClick={dial}
+            disabled={callState !== CALL_STATES.IDLE}
+          >
             Appeler
           </Action>
-          <Action icon={FlaskConical} onClick={simulate} disabled={callState !== CALL_STATES.IDLE}>
+          <Action
+            icon={FlaskConical}
+            onClick={simulate}
+            disabled={callState !== CALL_STATES.IDLE}
+          >
             Simuler
           </Action>
-          <Action icon={PhoneOff} onClick={hang} disabled={callState === CALL_STATES.IDLE}>
+          <Action
+            icon={PhoneOff}
+            onClick={hang}
+            disabled={callState === CALL_STATES.IDLE}
+          >
             Arrêter
           </Action>
-          <Action icon={SkipForward} onClick={next} disabled={callState !== CALL_STATES.IDLE}>
+          <Action
+            icon={SkipForward}
+            onClick={next}
+            disabled={callState !== CALL_STATES.IDLE}
+          >
             Suivant
           </Action>
           <Action icon={Lock} onClick={logout}>
             Logout
           </Action>
         </div>
-
-        {/* Outcome form */}
-          {showForm && (
+        {showForm &&
+          (callState === CALL_STATES.WAITING_OUTCOME ||
+            callState === CALL_STATES.COMPLETED) && (
             <ResultForm
               callResult={callResult}
               callNotes={callNotes}
@@ -469,6 +410,76 @@ return (
           )}
       </div>
     </div>
-  </div>
-);
+  );
+}
+
+// Helpers
+function Field({ label, value }: { label: string; value: string }) {
+  if (
+    (label === "LinkedIn" || label === "LinkedIn_URL") &&
+    value !== "—" &&
+    value.includes("linkedin.com")
+  ) {
+    return (
+      <p className="flex">
+        <span className="w-40 shrink-0 font-medium text-zinc-500">
+          {label} :
+        </span>
+        <a
+          href={value}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-blue-600 hover:text-blue-800 underline"
+        >
+          Voir profil LinkedIn
+        </a>
+      </p>
+    );
+  }
+
+  if (
+    (label.includes("Phone") || label.includes("Téléphone")) &&
+    value !== "—" &&
+    typeof value === "string"
+  ) {
+    const digits = value.replace(/\D/g, "");
+    let formatted = value.trim();
+
+    if (digits.length === 10) {
+      formatted = digits.replace(/(\d{3})(\d{3})(\d{4})/, "($1) $2-$3");
+    } else if (digits.length === 11 && digits.startsWith("1")) {
+      formatted = digits.replace(/1(\d{3})(\d{3})(\d{4})/, "+1 ($1) $2-$3");
+    }
+
+    return (
+      <p className="flex">
+        <span className="w-40 shrink-0 font-medium text-zinc-500">
+          {label} :
+        </span>
+        <span className="text-zinc-800 font-mono">{formatted}</span>
+      </p>
+    );
+  }
+
+  return (
+    <p className="flex">
+      <span className="w-40 shrink-0 font-medium text-zinc-500">{label} :</span>
+      <span className="text-zinc-800">{value}</span>
+    </p>
+  );
+}
+
+function Action({
+  icon: Icon,
+  children,
+  ...props
+}: React.ComponentProps<typeof Button> & { icon: any }) {
+  return (
+    <Button
+      className="gap-2 bg-[#E24218] hover:bg-[#d03d15] text-white font-bold h-10 text-sm rounded-xl px-4 py-2 shadow-lg transition-all"
+      {...props}
+    >
+      <Icon className="w-4 h-4" /> {children}
+    </Button>
+  );
 }

@@ -1,3 +1,4 @@
+// C:\Users\Frédéric-CharlesBois\projects\Powerdialer\functions\token-public.js
 exports.handler = function (context, event, callback) {
   const identity = event.identity || "anonymous";
 

@@ -1,3 +1,4 @@
+// C:\Users\Frédéric-CharlesBois\projects\Powerdialer\functions\api\airtable\update-result.ts
 // ✅ FINAL TEST VERSION: Hardcoded Airtable Token + Direct Update
 // Path: functions/api/airtable/update-result-direct.ts
 
@@ -12,11 +13,13 @@ interface UpdateResultPayload {
   statut?: string;
 }
 
-export const onRequest: PagesFunction = async ({ request }) => {
-  const AIRTABLE_TOKEN = "atopuALLxIH5YDGA.01bf2115299311f8076434534c5b6856537e870b19db17db2b6fff1bfab7fa33";
-  const AIRTABLE_BASE_ID = "apprTpOIFRuckIZJz";
-  const AIRTABLE_TABLE_NAME = "Interaction / Activities";
+interface Env {
+  AIRTABLE_WRITE_TOKEN: string;
+  AIRTABLE_BASE: string;
+  AIRTABLE_TABLE: string;
+}
 
+export const onRequest: PagesFunction<Env> = async ({ request, env }) => {
   const corsHeaders = {
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Methods": "POST, OPTIONS",
@@ -61,8 +64,8 @@ export const onRequest: PagesFunction = async ({ request }) => {
     });
   }
 
-  const url = `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${encodeURIComponent(
-    AIRTABLE_TABLE_NAME
+  const url = `https://api.airtable.com/v0/${env.AIRTABLE_BASE}/${encodeURIComponent(
+    env.AIRTABLE_TABLE
   )}/${recordId}`;
 
   const airtablePayload = {
@@ -81,7 +84,7 @@ export const onRequest: PagesFunction = async ({ request }) => {
     const airtableRes = await fetch(url, {
       method: "PATCH",
       headers: {
-        Authorization: `Bearer ${AIRTABLE_TOKEN}`,
+        Authorization: `Bearer ${env.AIRTABLE_WRITE_TOKEN}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify(airtablePayload),
