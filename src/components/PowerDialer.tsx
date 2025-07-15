@@ -17,7 +17,7 @@ import { useNavigate } from "react-router-dom";
 
 // === CONSTANTS ===
 const STUDIO_API_URL = "https://texion.app/api/studio";
-const FLOW_SID = "FW236e663e008973ab36cbfcdc706b6d97";
+const FLOW_SID = "FW52d9007999380cfbb435838d0733e84c";
 const QUEUE_API_URL = "https://texion.app/api/queue";
 const AIRTABLE_UPDATE_URL = "https://texion.app/api/airtable/update-result";
 const AGENT_CALLER_IDS: Record<string, string[]> = {

@@ -5,7 +5,7 @@
  * 
  * Expected body:
  * {
- *   "outcome": "Répondeur" | "Répondu_Humain" | "Pas_Joignable",
+ *   "outcome": "Répondu_Humain" | "Répondeur" | "Pas_Joignable",
  *   "number": "+15141234567",
  *   "activity": "SPARK Microsystems-Jean-Sebastien Poirier-T2-0.3 Cold Call 1",
  *   "callId": "call_1234567890_abc123",
@@ -15,8 +15,8 @@
 
 interface CallOutcomePayload {
   outcome: 'Répondu_Humain' | 'Répondeur' | 'Pas_Joignable';
-  number: string;
-  activity: string;
+  number?: string;
+  activity?: string;
   callId: string;
   agent: string;
 }
@@ -115,13 +115,13 @@ export const onRequest: PagesFunction<{ OUTCOMES_KV: KVNamespace }> = async (ctx
       await kv.put(
         `outcome_${payload.callId}`, 
         JSON.stringify(outcomeData), 
-        { expirationTtl: 3600 } // 1 hour expiration
+        { expirationTtl: 86400 } // 24 hours for scalability
       );
 
       // Also store in agent's recent outcomes list
       const agentKey = `recent_outcomes_${payload.agent.toLowerCase()}`;
-      const existingOutcomes = await kv.get(agentKey);
       let recentOutcomes: any[] = [];
+      const existingOutcomes = await kv.get(agentKey);
       
       if (existingOutcomes) {
         try {
@@ -131,14 +131,14 @@ export const onRequest: PagesFunction<{ OUTCOMES_KV: KVNamespace }> = async (ctx
         }
       }
 
-      // Add new outcome and keep only last 10
+      // Add new outcome and keep only last 50 for scalability
       recentOutcomes.unshift(outcomeData);
-      recentOutcomes = recentOutcomes.slice(0, 10);
+      recentOutcomes = recentOutcomes.slice(0, 50);
 
       await kv.put(
         agentKey,
         JSON.stringify(recentOutcomes),
-        { expirationTtl: 7200 } // 2 hours
+        { expirationTtl: 86400 } // 24 hours
       );
 
       // Log for debugging
