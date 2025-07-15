@@ -1,62 +1,86 @@
-import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { useState } from "react";
+import { Button } from "@/components/ui/button";
+import Logo from "/texion-logo.svg";
 
-export default function Login({
-  onLogin,
-}: {
-  onLogin: (username: string, password: string) => void;
-}) {
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
+<div className="h-[80px] overflow-hidden mb-6">
+  <img
+    src="/texion-logo.svg"
+    alt="texion"
+    className="w-[280px] object-contain"
+  />
+</div>
+
+export default function Login() {
+  const [user, setUser] = useState("");
+  const [pass, setPass] = useState("");
   const [error, setError] = useState("");
+  const navigate = useNavigate();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  function handleLogin(e: React.FormEvent) {
     e.preventDefault();
-    if (!username || !password) {
+    if (!user || !pass) {
       setError("Veuillez remplir tous les champs.");
       return;
     }
     setError("");
-    onLogin(username, password);
-  };
+    localStorage.setItem("texion_agent", user.trim());
+    navigate("/select");
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#f8fafc] via-[#fff] to-[#f3f4f6]">
-      <div className="rounded-2xl shadow-2xl bg-white/95 px-8 py-12 w-full max-w-md">
-        <div className="flex flex-col items-center mb-8">
-          <img src="/texion-logo.svg" alt="Texion logo" className="h-10 mb-2" />
-          <h1 className="text-2xl font-bold text-slate-900 mb-1">Connexion Agent</h1>
-          <p className="text-slate-500 mb-2">Accédez à votre Power Dialer</p>
-        </div>
-        <form onSubmit={handleSubmit} className="space-y-6">
+      <div className="rounded-2xl shadow-2xl bg-white/95 px-8 py-12 w-full max-w-lg flex flex-col items-center">
+        <img
+          src={Logo}
+          alt="texion"
+          className="w-[260px] max-w-full h-auto mb-8 mt-2 object-contain"
+        />
+        <h2 className="text-2xl font-bold text-slate-900 mb-1">
+          Connexion au portail texion.app
+        </h2>
+        <p className="text-slate-500 mb-6 text-center">
+          Accédez à vos outils d'excellence manufacturière.
+        </p>
+        <form onSubmit={handleLogin} className="w-full flex flex-col gap-4">
           <div>
-            <label className="block font-semibold text-slate-700 mb-1">Nom d'utilisateur</label>
+            <label className="block font-semibold text-slate-700 mb-1" htmlFor="user">
+              Nom d'utilisateur
+            </label>
             <input
-              className="w-full rounded-xl border border-slate-300 px-4 py-3 text-base bg-slate-50 focus:border-[#E24218] focus:outline-none"
+              id="user"
+              type="text"
+              value={user}
+              onChange={(e) => setUser(e.target.value)}
               placeholder="Entrez votre nom d'utilisateur"
-              value={username}
-              onChange={e => setUsername(e.target.value)}
+              className="w-full rounded-xl border border-slate-300 px-4 py-3 text-base bg-slate-50 focus:border-[#E24218] focus:outline-none"
+              required
             />
           </div>
           <div>
-            <label className="block font-semibold text-slate-700 mb-1">Mot de passe</label>
+            <label className="block font-semibold text-slate-700 mb-1" htmlFor="pass">
+              Mot de passe
+            </label>
             <input
+              id="pass"
               type="password"
-              className="w-full rounded-xl border border-slate-300 px-4 py-3 text-base bg-slate-50 focus:border-[#E24218] focus:outline-none"
+              value={pass}
+              onChange={(e) => setPass(e.target.value)}
               placeholder="Entrez votre mot de passe"
-              value={password}
-              onChange={e => setPassword(e.target.value)}
+              className="w-full rounded-xl border border-slate-300 px-4 py-3 text-base bg-slate-50 focus:border-[#E24218] focus:outline-none"
+              required
             />
           </div>
-          {error && <div className="text-red-600 text-sm">{error}</div>}
-          <button
+          {error && <div className="text-red-600 text-sm text-center">{error}</div>}
+          <Button
             type="submit"
-            className="w-full bg-[#E24218] hover:bg-[#d03d15] text-white font-bold h-12 text-base rounded-xl shadow-lg transition-all"
+            className="w-full bg-[#E24218] hover:bg-[#d03d15] text-white font-bold h-12 text-base rounded-xl shadow-lg transition-all mt-2"
           >
             Se connecter
-          </button>
+          </Button>
         </form>
         <footer className="mt-8 text-center text-slate-400 text-xs">
-          © 2024 TEXION. Tous droits réservés.
+          © 2025 TEXION. Tous droits réservés.
         </footer>
       </div>
     </div>

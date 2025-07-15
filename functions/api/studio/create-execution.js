@@ -1,89 +1,101 @@
-// Cloudflare Pages Function – always launch CC1 Powerdialer Outbound
-// ------------------------------------------------------------------
-//  ▸ Flow SID is hard‑coded so the frontend cannot change it.
-//  ▸ Logs show the exact REST URL that is called.
-//  ▸ Wildcard CORS allows any custom header in pre‑flight.
+const FLOW_SID = "FW236e663e008973ab36cbfcdc706b6d97";
 
-const FORCED_FLOW_SID = "FW236e663e008973ab36cbfcdc706b6d97"; // CC1 – Powerdialer Outbound
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-  "Access-Control-Allow-Headers": "*",   // wildcard so every header passes
-  "Access-Control-Max-Age": "86400",
-};
-
-// ---- OPTIONS (CORS pre‑flight) -----------------------------------
+/* ---------- CORS pre-flight ---------- */
 export const onRequestOptions = () =>
-  new Response(null, { status: 200, headers: corsHeaders });
+  new Response(null, {
+    status: 204,
+    headers: {
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Methods": "POST, OPTIONS",
+      "Access-Control-Allow-Headers": "*",
+      "Access-Control-Max-Age": "86400"
+    }
+  });
 
-// ---- POST ---------------------------------------------------------
+/* ---------- POST /api/studio/create-execution ---------- */
 export async function onRequestPost({ request, env }) {
-  // helper to send JSON error responses
-  const bad = (msg, code = "ERROR", status = 400) =>
-    json({ success: false, error: msg, code }, status);
+  const respond = (obj, status = 200) =>
+    new Response(JSON.stringify(obj), {
+      status,
+      headers: {
+        "Content-Type": "application/json",
+        "Access-Control-Allow-Origin": "*"
+      }
+    });
 
-  // 1. Parse body ---------------------------------------------------
+  /* 1 ▸ parse body */
   let body;
   try {
     body = await request.json();
   } catch {
-    return bad("Body must be valid JSON", "BAD_JSON");
+    return respond({ success: false, error: "Body must be valid JSON" }, 400);
   }
 
-  const { to, from, parameters } = body || {};
-  if (!to || !from) return bad("to and from are required", "VALIDATION_ERROR");
+  const { to, from, parameters: extra = {} } = body || {};
+  if (!to || !from)
+    return respond({ success: false, error: "`to` and `from` are required" }, 400);
 
-  // 2. Credentials --------------------------------------------------
-  const { TWILIO_ACCOUNT_SID: sid, TWILIO_AUTH_TOKEN: token } = env;
-  if (!sid || !token) return bad("Missing Twilio credentials", "MISSING_CREDENTIALS", 500);
-
-  // 3. Quick phone sanity (E.164) -----------------------------------
-  const e164 = /^\+\d{8,15}$/;
+  const e164 = /^\+\d{10,15}$/;
   if (!e164.test(to) || !e164.test(from))
-    return bad("Phone numbers must be E.164 (+15551234567)", "INVALID_PHONE");
+    return respond(
+      { success: false, error: "Phone numbers must be E.164 (+15551234567)" },
+      400
+    );
 
-  // 4. Call Twilio Studio ------------------------------------------
-  console.log(`➡️  Calling Twilio Studio Flow ${FORCED_FLOW_SID} for ${to}`);
+  /* 2 ▸ credentials */
+  const { TWILIO_ACCOUNT_SID: sid, TWILIO_AUTH_TOKEN: token } = env;
+  if (!sid || !token)
+    return respond({ success: false, error: "Missing Twilio credentials" }, 500);
 
-  const auth = btoa(`${sid}:${token}`);
-  const encoded = new URLSearchParams({
+  /* 3 ▸ build Parameters JSON */
+  const flowParams = {
+    ...extra,
+    to,
+    from
+  };
+
+  /* 4 ▸ form-encode body
+       - To / From (capitalised)       → contact.channel & misc
+       - to / from (lower case)        → trigger.parameters.to/from  ✅
+       - Parameters (stringified JSON) → flow.data + logging         ✅           */
+  const form = new URLSearchParams({
     To: to,
     From: from,
-    Parameters: JSON.stringify(parameters || {}),
-  }).toString();
+    to,
+    from,
+    Parameters: JSON.stringify(flowParams)
+  });
 
-  const twilio = await fetch(
-    `https://studio.twilio.com/v2/Flows/${FORCED_FLOW_SID}/Executions`,
+  /* 5 ▸ hit Studio */
+  const twilioResp = await fetch(
+    `https://studio.twilio.com/v2/Flows/${FLOW_SID}/Executions`,
     {
       method: "POST",
       headers: {
-        Authorization: `Basic ${auth}`,
-        "Content-Type": "application/x-www-form-urlencoded",
+        Authorization: "Basic " + btoa(`${sid}:${token}`),
+        "Content-Type": "application/x-www-form-urlencoded"
       },
-      body: encoded,
+      body: form.toString()
     }
   );
 
-  if (!twilio.ok) {
-    const errText = await twilio.text();
-    console.error("Twilio API error", twilio.status, errText);
-    return bad(`Twilio API ${twilio.status}`, "TWILIO_API_ERROR", 502);
+  if (!twilioResp.ok) {
+    const txt = await twilioResp.text();
+    return respond(
+      { success: false, error: `Twilio API ${twilioResp.status}: ${txt}` },
+      502
+    );
   }
 
-  const exec = await twilio.json();
-  return json({
-    success: true,
-    executionSid: exec.sid,
-    status: exec.status,
-    flowSid: FORCED_FLOW_SID,
-  }, 201);
-}
-
-// ---- helper -------------------------------------------------------
-function json(data, status = 200) {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: { "Content-Type": "application/json", ...corsHeaders },
-  });
+  /* 6 ▸ success */
+  const exec = await twilioResp.json();
+  return respond(
+    {
+      success: true,
+      executionSid: exec.sid,
+      status: exec.status,
+      flowSid: FLOW_SID
+    },
+    201
+  );
 }
