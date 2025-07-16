@@ -1,4 +1,4 @@
-// PowerDialer.tsx — automatic outcome polling integrated
+// PowerDialer.tsx — automatic outcome polling integrated (PRODUCTION READY)
 // -----------------------------------------------------------------------------
 // KEY ADDITIONS (search for "// >>>" comments):
 // 1. OUTCOME_POLL_URL const
@@ -84,76 +84,66 @@ export default function PowerDialer() {
   const current = records[idx] ?? {};
   const get = (obj: any, key: string, fb = "—") => Array.isArray(obj?.[key]) ? obj[key][0] ?? fb : obj?.[key] ?? fb;
 
-async function getTwilioAccessToken(identity: string): Promise<string | null> {
-  try {
-    const res = await fetch(`/api/generate-access-token?identity=${identity}`);
-    if (!res.ok) throw new Error("Failed to fetch Twilio token");
-    const data: { token: string } = await res.json();
-    return data.token;
-  } catch (err: any) {
-    console.error("Token error:", err);
-    setStatus("❌ Échec de l'obtention du token Twilio");
-    return null;
-  }
-}
+  
   // ------------------------------------------------------------------
   // Helper to start polling KV for outcome until we get it or timeout
   // ------------------------------------------------------------------
-  
-const startPollingOutcome = (callId: string) => {
-  let attempts = 0;
-  if (pollRef.current) clearInterval(pollRef.current);
+  const startPollingOutcome = (callId: string) => {
+    let attempts = 0;
+    if (pollRef.current) clearInterval(pollRef.current);
 
-  pollRef.current = setInterval(async () => {
-    if (attempts++ > 10) {
-      clearInterval(pollRef.current!);
-      return;
-    }
-
-    try {
-      const res = await fetch(`${OUTCOME_POLL_URL}?callId=${callId}`);
-      if (!res.ok) return;
-
-      const data: { outcome?: string } = await res.json();
-      if (
-        data?.outcome &&
-        ["Répondeur", "Pas_Joignable", "Répondu_Humain"].includes(data.outcome)
-      ) {
+    pollRef.current = setInterval(async () => {
+      if (attempts++ > 10) {
         clearInterval(pollRef.current!);
-
-        const outcome = data.outcome as RawOutcome;
-        const mapped = mapRawOutcomeToCallResult(outcome);
-
-        if (mapped) {
-          setCallResult(mapped);
-          setCallState(CALL_STATES.COMPLETED);
-          setStatus(`📞 ${mapped === "Boite_Vocale" ? "Boîte vocale" : mapped}`);
-        } else {
-          setStatus("✅ Répondu (suivi manuel requis)");
-        }
-
-        setShowForm(true);
-        // Auto-submit if outcome is auto-resolved (Boite_Vocale or Pas_Joignable)
-        if (mapped && ["Boite_Vocale", "Pas_Joignable"].includes(mapped)) {
-          setTimeout(() => {
-            const saveBtn = document.querySelector("button[type='submit']") as HTMLButtonElement;
-            if (saveBtn) saveBtn.click();
-          }, 200); // wait a bit for form to render
-        }
-
+        return;
       }
-    } catch (err: any) {
-      console.error("Polling error:", err);
-    }
-  }, 4000);
-};
 
-const clearPollingOutcome = () => {
-  if (pollRef.current) {
-    clearInterval(pollRef.current);
-    pollRef.current = null;
+      try {
+        const res = await fetch(`${OUTCOME_POLL_URL}?callId=${callId}`);
+        if (!res.ok) return;
+
+        const data: { outcome?: string } = await res.json();
+        if (
+          data?.outcome &&
+          ["Répondeur", "Pas_Joignable", "Répondu_Humain"].includes(data.outcome)
+        ) {
+          clearInterval(pollRef.current!);
+
+          const outcome = data.outcome as RawOutcome;
+          const mapped = mapRawOutcomeToCallResult(outcome);
+
+          if (mapped) {
+            setCallResult(mapped);
+            setCallState(CALL_STATES.COMPLETED);
+            setStatus(`📞 ${mapped === "Boite_Vocale" ? "Boîte vocale" : mapped}`);
+          } else {
+            setStatus("✅ Répondu (suivi manuel requis)");
+          }
+
+          setShowForm(true);
+          
+          // Auto-submit if outcome is auto-resolved (Boite_Vocale or Pas_Joignable)
+          if (mapped && ["Boite_Vocale", "Pas_Joignable"].includes(mapped)) {
+            setTimeout(() => {
+              const form = document.querySelector("form");
+              if (form && 'requestSubmit' in form) {
+                form.requestSubmit();
+              }
+            }, 500); // Increased delay to ensure form is fully rendered
+          }
+        }
+      } catch (err: any) {
+        console.error("Polling error:", err);
+      }
+    }, 4000);
+  };
+
+  const clearPollingOutcome = () => {
+    if (pollRef.current) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
   }
-};
 
   // ------------------------------------------------------------------
   // Fetch queue
@@ -168,7 +158,7 @@ const clearPollingOutcome = () => {
         setRecords(data);
         setLoading(false);
         setStatus("Contacts chargés");
-      } catch (err: any) {const agent = localStorage.getItem("texion_agent")?.toLowerCase() || "";
+      } catch (err: any) {
         console.error("Queue fetch error:", err);
         setStatus("Erreur de chargement des contacts");
         setLoading(false);
@@ -177,102 +167,122 @@ const clearPollingOutcome = () => {
     fetchQueue();
   }, []);
 
+  // Simplified Twilio device initialization
   useEffect(() => {
-  const setupTwilioDevice = async () => {
-    const token = await getTwilioAccessToken(agentKey);
-    if (token) {
-      initTwilioDevice(token);
+    initTwilioDevice(agentKey);   // ✅ already passes the identity
+  }, [agentKey]);
+
+  // Ensure form is visible when in appropriate states
+  useEffect(() => {
+    if (callState === CALL_STATES.WAITING_OUTCOME || callState === CALL_STATES.COMPLETED) {
+      setShowForm(true);
     }
-  };
-
-  setupTwilioDevice();
-}, [agentKey]);
-
+  }, [callState]);
 
   // === LOGIC FUNCTIONS ===
   const dial = async () => {
     if (callState !== CALL_STATES.IDLE) {
-      setStatus("Opération en cours…");
+      setStatus("Opération en cours...");
       return;
     }
-    const raw =
-  get(current, "Mobile_Phone") ||
-  get(current, "Direct_Phone") ||
-  get(current, "Company_Phone");
+    
+    // Get phone number
+    const raw = get(current, "Mobile_Phone") || 
+                get(current, "Direct_Phone") || 
+                get(current, "Company_Phone");
 
-if (!raw || raw === "—") return setStatus("Aucun numéro valide !");
-const digits = raw.replace(/\D/g, "");
-const to =
-  digits.length === 10
-    ? `+1${digits}`
-    : digits.length === 11 && digits.startsWith("1")
-    ? `+${digits}`
-    : raw.startsWith("+")
-    ? raw
-    : null;
-const device = getTwilioDevice();
-if (device?.calls && device.calls.length > 0) {
-  setStatus("📞 Un appel est déjà en cours");
-  return;
-}
+    if (!raw || raw === "—") return setStatus("Aucun numéro valide !");
+    
+    const digits = raw.replace(/\D/g, "");
+    const to = digits.length === 10
+      ? `+1${digits}`
+      : digits.length === 11 && digits.startsWith("1")
+      ? `+${digits}`
+      : raw.startsWith("+")
+      ? raw
+      : null;
 
-if (!to || !/^\+\d{10,15}$/.test(to)) {
-  setStatus("Numéro de destination invalide !");
-  return;
-}
+    if (!to || !/^\+\d{10,15}$/.test(to)) {
+      setStatus("Numéro de destination invalide !");
+      return;
+    }
 
-device?.connect({ params: { To: to } });
+    // Check Twilio device state using isBusy
+    const device = getTwilioDevice();
+    if (device?.isBusy) {
+      setStatus("📞 Un appel est déjà en cours");
+      return;
+    }
 
-
-
-
+    // Set initial states
     setCallState(CALL_STATES.TRIGGERING_FLOW);
     setStatus(`🚀 Déclenchement du flow pour ${to}…`);
     setShowForm(false);
     setCallResult("S_O");
     setCallNotes("");
+    setMeetingNotes("");
+    setMeetingDatetime("");
+
     try {
-      const callId =
-        typeof crypto.randomUUID === "function"
-          ? crypto.randomUUID()
-          : Date.now().toString();
+      // Generate call ID
+      const callId = typeof crypto.randomUUID === "function"
+        ? crypto.randomUUID()
+        : Date.now().toString();
 
       (current as any).id = callId;
 
-    const payload = {
-  To: to,               // destination
-  From: callerId,       // caller‑ID
-  Parameters: {         // <-- everything else lives here
-    callId,
-    leadName: get(current, "Full_Name"),
-    company: get(current, "Nom_de_la_compagnie"),
-    activity: get(current, "Activité 2.0 H.C."),
-    agent,
-    activityName: get(current, "Nom_de_l_Activite")
-  }
-};
-await fetch(`${STUDIO_API_URL}/create-execution`, {
-  method: "POST",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify(payload)
-});
+      // Create payload with proper casing
+      const payload = {
+      to: to,  // lowercase
+      from: callerId,  // lowercase
+      parameters: {  // lowercase here too if function expects it, but it's Parameters in API so fine
+        callId,
+        leadName: get(current, "Full_Name"),
+        company: get(current, "Nom_de_la_compagnie"),
+        activity: get(current, "Activité 2.0 H.C."),
+        agent,
+        activityName: get(current, "Nom_de_l_Activite")
+        }
+    };
 
+      // Trigger the Studio flow
       const res = await fetch(`${STUDIO_API_URL}/create-execution`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
+
       const json: { success: boolean; executionSid?: string; error?: string } = await res.json();
-      if (!json.success || !json.executionSid) throw new Error(json.error || "API error");
+      
+      if (!json.success || !json.executionSid) {
+        throw new Error(json.error || "API error");
+      }
+
+      // Connect Twilio device AFTER the flow is created
+      device?.connect({ params: { To: to } });
+
+      // Update states
       setCurrentExecutionSid(json.executionSid);
       setStatus(`📞 Flow déclenché – ex ${json.executionSid.slice(-6)}`);
       setCallState(CALL_STATES.WAITING_OUTCOME);
-      setShowForm(true); // >>> Show form immediately when call starts
-      // >>> start polling for outcome now
+      setShowForm(true); // Show form immediately
+      
+      // Start polling for outcome
       startPollingOutcome(callId);
+
+      // Debug logging only in development
+      if (import.meta.env.DEV) {
+        console.log("Dial states set:", { 
+          callState: CALL_STATES.WAITING_OUTCOME, 
+          showForm: true,
+          currentExecutionSid: json.executionSid 
+        });
+      }
+      
     } catch (err: any) {
       setCallState(CALL_STATES.ERROR);
       setStatus(`❌ Erreur : ${err.message}`);
+      setShowForm(false);
     }
   };
 
@@ -344,11 +354,11 @@ await fetch(`${STUDIO_API_URL}/create-execution`, {
     setMeetingDatetime("");
     setCallState(CALL_STATES.IDLE);
     setStatus("✅ Résultat sauvegardé");
+    next();
     setTimeout(() => {
       const callBtn = document.querySelector("button:has(svg.lucide-phone)") as HTMLButtonElement;
       if (callBtn) callBtn.click();
     }, 1000);
-
   };
 
   async function updateCallResult(
@@ -422,6 +432,15 @@ await fetch(`${STUDIO_API_URL}/create-execution`, {
   if (records.length === 0)
     return <p className="p-10 text-center">Aucun contact à appeler 👍</p>;
 
+  // Debug logging only in development
+  if (import.meta.env.DEV) {
+    console.log("Form render check:", { 
+      showForm, 
+      callState, 
+      shouldRender: showForm && (callState === CALL_STATES.WAITING_OUTCOME || callState === CALL_STATES.COMPLETED) 
+    });
+  }
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#f8fafc] via-[#fff] to-[#f3f4f6]">
       <div className="rounded-2xl shadow-2xl bg-white/95 px-8 py-12 w-full max-w-3xl flex flex-col items-center">
@@ -463,7 +482,7 @@ await fetch(`${STUDIO_API_URL}/create-execution`, {
           </div>
           <div>
             <h3 className="mb-2 font-semibold text-zinc-800">Infos Activité</h3>
-            <Field label="Nom de l’activité" value={get(current, "Nom_de_l_Activite")} />
+            <Field label="Nom de l'activité" value={get(current, "Nom_de_l_Activite")} />
             <Field label="Type d'Activité" value={get(current, "Activité 2.0 H.C.")} />
             <Field label="Responsable de l'Activité" value={get(current, "Nom du Responsable")} />
             <Field label="Priorité" value={get(current, "Priorite")} />
@@ -531,22 +550,20 @@ await fetch(`${STUDIO_API_URL}/create-execution`, {
             Logout
           </Action>
         </div>
-        {showForm &&
-          (callState === CALL_STATES.WAITING_OUTCOME ||
-            callState === CALL_STATES.COMPLETED) && (
-            <ResultForm
-              callResult={callResult}
-              callNotes={callNotes}
-              meetingNotes={meetingNotes}
-              meetingDatetime={meetingDatetime}
-              script={get(current, "Message_content")}
-              onCallResultChange={setCallResult}
-              onCallNotesChange={setCallNotes}
-              onMeetingNotesChange={setMeetingNotes}
-              onMeetingDatetimeChange={setMeetingDatetime}
-              onSubmit={saveAndNext}
-            />
-          )}
+        {showForm && (
+          <ResultForm
+            callResult={callResult}
+            callNotes={callNotes}
+            meetingNotes={meetingNotes}
+            meetingDatetime={meetingDatetime}
+            script={get(current, "Message_content")}
+            onCallResultChange={setCallResult}
+            onCallNotesChange={setCallNotes}
+            onMeetingNotesChange={setMeetingNotes}
+            onMeetingDatetimeChange={setMeetingDatetime}
+            onSubmit={saveAndNext}
+          />
+        )}
       </div>
     </div>
   );

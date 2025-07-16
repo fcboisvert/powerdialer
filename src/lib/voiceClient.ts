@@ -1,9 +1,6 @@
-// src/lib/voiceClient.ts
+// src/lib/voiceClient.ts - Optimized for outgoing calls with proper registration
 import { Device } from '@twilio/voice-sdk';
-
-/** 2nd arg of the Device constructor */
-type DeviceOptions = ConstructorParameters<typeof Device>[1];
-type TwilioAccessTokenResponse = { token: string };
+import type { DeviceOptions } from '@twilio/voice-sdk';
 
 let device: Device | null = null;
 
@@ -13,34 +10,34 @@ let device: Device | null = null;
  */
 export async function initTwilioDevice(identity: string): Promise<void> {
   if (device) {
-    console.warn('Twilio Device already initialised');
-    return;
+    return; // Already initialized; no-op to avoid duplicates
   }
 
-  /* ----- Fetch JWT from Pages Function ----- */
-  const res = await fetch(
-    `/api/token-public?identity=${encodeURIComponent(identity)}`
-  );
-  if (!res.ok) throw new Error('Failed to fetch Twilio token');
+  try {
+    const res = await fetch(`/api/generate-access-token?identity=${encodeURIComponent(identity)}`);
+    if (!res.ok) throw new Error(`Failed to fetch Twilio token: ${res.status}`);
+    const data: { token: string } = await res.json();
 
-  const { token } = (await res.json()) as TwilioAccessTokenResponse;
+    // Typed options for codec prefs (avoids inference issues)
+    const options: Partial<DeviceOptions> = {
+      codecPreferences: ['opus', 'pcmu'] as ('opus' | 'pcmu')[],
+      debug: import.meta.env.DEV, // Debug only in dev
+      enableRingingState: true,
+    };
 
-  /* ----- Safe, typed options ----- */
-  const options: Partial<DeviceOptions> = {
-    codecPreferences: ['opus', 'pcmu'], // literal-typed list
-    debug: true,
-    enableRingingState: true,
-  };
+    device = new Device(data.token, options);
 
-  /* ----- Create & wire up the device ----- */
-  device = new Device(token, options);
+    device.on('ready', () => console.log('🔔 Twilio Device ready'));
+    device.on('error', (error) => console.error('❌ Twilio error:', error));
+    device.on('incoming', (conn) => conn.reject()); // Reject unexpected inbound
 
-  device.on('ready', () => console.log('🔔 Twilio Device ready'));
-  device.on('incoming', (conn) => conn.reject()); // reject unexpected inbound
-  device.on('error', (err) => console.error('❌ Twilio error:', err));
+    await device.register(); // Ensures device is fully registered for status
+  } catch (err: any) {
+    console.error("Twilio init error:", err);
+    throw err; // Propagate for caller handling
+  }
 }
 
-/** Access the singleton instance (may be null before init). */
 export function getTwilioDevice(): Device | null {
   return device;
 }
@@ -49,6 +46,7 @@ export function getTwilioDevice(): Device | null {
 export function destroyTwilioDevice(): void {
   if (device) {
     device.disconnectAll();
+    device.unregister(); // Clean unregister
     device.destroy();
     device = null;
   }
