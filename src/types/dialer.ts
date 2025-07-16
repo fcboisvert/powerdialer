@@ -21,8 +21,6 @@ export interface PowerDialerProps {
   onLogout: () => void;
 }
 
-// === Outcome values sent by Twilio or Flow logic ===
-export type RawOutcome = 'Répondu_Humain' | 'Répondeur' | 'Pas_Joignable';
 
 // === Normalized call outcomes (used in Airtable + UI form) ===
 export type CallResult =

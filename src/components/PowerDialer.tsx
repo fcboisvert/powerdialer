@@ -11,8 +11,6 @@ import {
   getTwilioDevice,
   destroyTwilioDevice,
 } from "@/lib/voiceClient";
-import { mapRawOutcomeToCallResult } from "@/utils/mapOutcome";
-import type { RawOutcome } from "@/types/dialer";
 import React, { useEffect, useState, useRef } from "react";
 import type { CallRecord } from "@/types/dialer";
 import { Button } from "@/components/ui/button";
@@ -105,32 +103,24 @@ export default function PowerDialer() {
         const data: { outcome?: string } = await res.json();
         if (
           data?.outcome &&
-          ["Répondeur", "Pas_Joignable", "Répondu_Humain"].includes(data.outcome)
+          ["Boite_Vocale", "Pas_Joignable"].includes(data.outcome)
         ) {
           clearInterval(pollRef.current!);
 
-          const outcome = data.outcome as RawOutcome;
-          const mapped = mapRawOutcomeToCallResult(outcome);
+          const outcome = data.outcome as CallResult ;
 
-          if (mapped) {
-            setCallResult(mapped);
+            setCallResult(outcome);
             setCallState(CALL_STATES.COMPLETED);
-            setStatus(`📞 ${mapped === "Boite_Vocale" ? "Boîte vocale" : mapped}`);
-          } else {
-            setStatus("✅ Répondu (suivi manuel requis)");
-          }
-
-          setShowForm(true);
+            setStatus(`📞 ${outcome}`);
+            setShowForm(true);
           
           // Auto-submit if outcome is auto-resolved (Boite_Vocale or Pas_Joignable)
-          if (mapped && ["Boite_Vocale", "Pas_Joignable"].includes(mapped)) {
             setTimeout(() => {
               const form = document.querySelector("form");
               if (form && 'requestSubmit' in form) {
                 form.requestSubmit();
               }
             }, 500); // Increased delay to ensure form is fully rendered
-          }
         }
       } catch (err: any) {
         console.error("Polling error:", err);
