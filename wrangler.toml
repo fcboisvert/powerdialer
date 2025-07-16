@@ -11,14 +11,7 @@ external = ["jose"]
 name = "powerdialer"
 compatibility_date = "2025-07-15"
 
-# ⬇️ Secrets must still be added via CLI
-# run once per secret:
-# npx wrangler secret put ACCOUNT_SID
-# npx wrangler secret put AUTH_TOKEN
-# npx wrangler secret put AIRTABLE_WRITE_TOKEN
-# npx wrangler secret put TWILIO_ACCOUNT_SID
-# npx wrangler secret put TWILIO_AUTH_TOKEN
-# npx wrangler secret put FLOW_SID
-
+# ⬇️ Secrets already added via dashboard
+# npx wrangler secret put commands commented out since managed in UI
 # [observability.logs]  # Commented out—Pages doesn't support; enable via Worker dashboard
 # enabled = true
