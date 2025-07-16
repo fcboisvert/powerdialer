@@ -7,7 +7,7 @@
 interface Env {
   TWILIO_ACCOUNT_SID: string;
   TWILIO_AUTH_TOKEN: string;
-  //FLOW_SID: string;
+  FLOW_SID: string;
 }
 
 const corsHeaders = {
@@ -50,8 +50,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
 
   /* ---------- Call Twilio Studio REST API ---------- */
   const resp = await fetch(
-    `https://studio.twilio.com/v2/Flows/FW52d9007999380cfbb435838d0733e84c/Executions`,
-    //`https://studio.twilio.com/v2/Flows/${env.FLOW_SID}/Executions`,
+      `https://studio.twilio.com/v2/Flows/${env.FLOW_SID}/Executions`,
     {
       method: 'POST',
       headers: {
