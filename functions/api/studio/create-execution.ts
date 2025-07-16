@@ -10,6 +10,19 @@ interface Env {
   FLOW_SID: string;
 }
 
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",  // Wildcard for dev; scope to texion.app later
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type",
+  "Access-Control-Max-Age": "86400",
+};
+
+// OPTIONS (CORS preflight)
+export const onRequestOptions: PagesFunction<Env> = async () => {
+  return new Response(null, { status: 204, headers: corsHeaders });
+};
+
+// POST
 export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   /* ---------- Parse & validate body ---------- */
   let payload: {
@@ -27,6 +40,12 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   const { to, from, parameters } = payload;
   if (!to || !from) {
     return json({ error: '`to` and `from` are required' }, 400);
+  }
+
+  // Quick E.164 sanity (add if volumes spike)
+  const e164 = /^\+\d{8,15}$/;
+  if (!e164.test(to) || !e164.test(from)) {
+    return json({ error: 'Phones must be E.164 (+15551234567)' }, 400);
   }
 
   /* ---------- Call Twilio Studio REST API ---------- */
@@ -56,5 +75,6 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
 const json = (data: unknown, status = 200): Response =>
   new Response(JSON.stringify(data), {
     status,
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...corsHeaders },
   });
+  
