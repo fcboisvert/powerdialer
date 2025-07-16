@@ -1,13 +1,13 @@
 /// <reference types="@cloudflare/workers-types" />
 import type { KVNamespace } from '@cloudflare/workers-types';
-import { mapRawOutcomeToCallResult } from '@/utils/mapOutcome';
 
 interface Env {
   OUTCOMES_KV: KVNamespace;
 }
+  const validOutcomes = ['Boite_Vocale', 'Pas_Joignable'] as const;
 
 interface CallOutcomePayload {
-  outcome: 'Répondu_Humain' | 'Répondeur' | 'Pas_Joignable';
+  outcome: 'Boite_Vocale' | 'Pas_Joignable';
   number: string;
   activity: string;
   activityName: string;
@@ -49,7 +49,6 @@ export const onRequest: PagesFunction<Env> = async (ctx) => {
   }
 
   const { outcome, callId, agent } = payload;
-  const validOutcomes = ['Répondu_Humain', 'Répondeur', 'Pas_Joignable'] as const;
 
   if (!outcome || !callId || !agent) {
     return new Response(
@@ -84,21 +83,14 @@ export const onRequest: PagesFunction<Env> = async (ctx) => {
   recent.unshift(outcomeData);
   await kv.put(agentKey, JSON.stringify(recent.slice(0, 10)), { expirationTtl: 86400 });
 
-  const airtableResult = mapRawOutcomeToCallResult(outcome);
-  if (!airtableResult) {
-    return new Response(
-      JSON.stringify({ success: true, message: 'Outcome ignored (manual result expected)' }),
-      { status: 200, headers: { 'content-type': 'application/json', ...corsHeaders } }
-    );
-  }
+ 
 
-  if (['Répondeur', 'Pas_Joignable'].includes(outcome)) {
     const res = await fetch('https://texion.app/api/airtable/update-result', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         activityName: payload.activityName,
-        result: airtableResult,
+        result: outcome,
         notes: '',
         agent: payload.agent,
         meetingNotes: '',
@@ -110,9 +102,8 @@ export const onRequest: PagesFunction<Env> = async (ctx) => {
     if (!res.ok) {
       console.error('[call-outcome] Airtable update failed:', await res.text());
     } else {
-      console.log('[call-outcome] Airtable updated ✔', airtableResult);
+      console.log('[call-outcome] Airtable updated ✔', outcome);
     }
-  }
 
   // --- Success response ----------------------------------------------
   return new Response(
