@@ -16,7 +16,7 @@ interface CallOutcomePayload {
 }
 
 export const onRequest: PagesFunction<Env> = async (ctx) => {
-  const kv = ctx.env.OUTCOMES_KV;
+
   const { request } = ctx;
   
   // --- CORS -----------------------------------------------------------
@@ -65,27 +65,7 @@ export const onRequest: PagesFunction<Env> = async (ctx) => {
     );
   }
 
-  const existingOutcome = await kv.get(`outcome_${callId}`);
-  if (existingOutcome) {
-    return new Response(
-      JSON.stringify({ success: true, message: 'Outcome already recorded' }),
-      { status: 200, headers: { 'content-type': 'application/json', ...corsHeaders } }
-    );
-  }
-
-  const outcomeData = { ...payload, timestamp: new Date().toISOString(), processed: false };
-  await kv.put(`outcome_${callId}`, JSON.stringify(outcomeData), { expirationTtl: 86400 });
-  
-  // keep last 10 outcomes per agent for quick lookup
-  const agentKey = `recent_outcomes_${agent.toLowerCase()}`;
-  const existing = await kv.get(agentKey);
-  const recent = existing ? (JSON.parse(existing) as typeof outcomeData[]) : [];
-  recent.unshift(outcomeData);
-  await kv.put(agentKey, JSON.stringify(recent.slice(0, 10)), { expirationTtl: 86400 });
-
- 
-
-    const res = await fetch('https://texion.app/api/airtable/update-result', {
+     const res = await fetch('https://texion.app/api/airtable/update-result', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
