@@ -4,6 +4,9 @@ name = "powerdialer"
 compatibility_date = "2025-07-15"
 pages_build_output_dir = "./dist"
 
+[functions]
+external = ["jose"]
+
 [env.production]
 name = "powerdialer"
 compatibility_date = "2025-07-15"
@@ -13,3 +16,9 @@ compatibility_date = "2025-07-15"
 # npx wrangler secret put ACCOUNT_SID
 # npx wrangler secret put AUTH_TOKEN
 # npx wrangler secret put AIRTABLE_WRITE_TOKEN
+# npx wrangler secret put TWILIO_ACCOUNT_SID
+# npx wrangler secret put TWILIO_AUTH_TOKEN
+# npx wrangler secret put FLOW_SID
+
+# [observability.logs]  # Commented out—Pages doesn't support; enable via Worker dashboard
+# enabled = true
