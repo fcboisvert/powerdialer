@@ -1,6 +1,5 @@
 // functions/api/generate-access-token.ts
-
-import jwt from 'jsonwebtoken';
+import { SignJWT } from 'jose';
 
 export interface Env {
   ACCOUNT_SID: string;
@@ -8,8 +7,8 @@ export interface Env {
   TWIML_APP_SID: string;
 }
 
-export const onRequest: PagesFunction<Env> = async (context) => {
-  const url = new URL(context.request.url);
+export const onRequest: PagesFunction<Env> = async ({ request, env }) => {
+  const url = new URL(request.url);
   const identity = url.searchParams.get('identity');
 
   const allowedIdentities = ['frederic', 'simon'];
@@ -20,18 +19,20 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     });
   }
 
-  const { ACCOUNT_SID, AUTH_TOKEN, TWIML_APP_SID } = context.env;
+  const { ACCOUNT_SID, AUTH_TOKEN, TWIML_APP_SID } = env;
+  const iat = Math.floor(Date.now() / 1000);
+  const exp = iat + 3600;
 
-  const exp = Math.floor(Date.now() / 1000) + 3600; // 1 hour
-  const payload = {
+  const jwt = await new SignJWT({
     scope: `scope:client:outgoing?appSid=${TWIML_APP_SID}&clientName=${identity}`,
-    iss: ACCOUNT_SID,
-    exp,
-  };
+  })
+    .setProtectedHeader({ alg: 'HS256' })
+    .setIssuedAt(iat)
+    .setIssuer(ACCOUNT_SID)
+    .setExpirationTime(exp)
+    .sign(new TextEncoder().encode(AUTH_TOKEN));
 
-  const token = jwt.sign(payload, AUTH_TOKEN);
-
-  return new Response(JSON.stringify({ token }), {
+  return new Response(JSON.stringify({ token: jwt }), {
     status: 200,
     headers: {
       'Content-Type': 'application/json',

@@ -1,11 +1,15 @@
-# wrangler.toml — PowerDialer (Pages + Functions)
+# wrangler.toml
 
-name                 = "powerdialer-worker"   # worker name (ignored by Pages, but fine to keep)
-compatibility_date   = "2025-07-15"
-compatibility_flags  = ["nodejs_compat"]      # polyfill Node core modules for Twilio SDK
-pages_build_output_dir = "./dist"             # Vite build output
+name = "powerdialer"
+compatibility_date = "2025-07-15"
+pages_build_output_dir = "./dist"
 
-[vars]                                     # runtime env vars for your Functions
-AIRTABLE_BASE  = "apprTpOIFRuckIZJz"
-AIRTABLE_TABLE = "Interaction / Activities"
-# AIRTABLE_TOKEN stays a secret; don’t hard-code it here
+[env.production]
+name = "powerdialer"
+compatibility_date = "2025-07-15"
+
+# ⬇️ Secrets must still be added via CLI
+# run once per secret:
+# npx wrangler secret put ACCOUNT_SID
+# npx wrangler secret put AUTH_TOKEN
+# npx wrangler secret put AIRTABLE_WRITE_TOKEN

@@ -168,7 +168,7 @@ const clearPollingOutcome = () => {
         setRecords(data);
         setLoading(false);
         setStatus("Contacts chargés");
-      } catch (err: any) {
+      } catch (err: any) {const agent = localStorage.getItem("texion_agent")?.toLowerCase() || "";
         console.error("Queue fetch error:", err);
         setStatus("Erreur de chargement des contacts");
         setLoading(false);
@@ -211,10 +211,11 @@ const to =
     ? raw
     : null;
 const device = getTwilioDevice();
-if (device?.isBusy) {
+if (device?.calls && device.calls.length > 0) {
   setStatus("📞 Un appel est déjà en cours");
   return;
 }
+
 if (!to || !/^\+\d{10,15}$/.test(to)) {
   setStatus("Numéro de destination invalide !");
   return;
@@ -238,18 +239,24 @@ device?.connect({ params: { To: to } });
 
       (current as any).id = callId;
 
-      const payload = {
-        to,
-        from: callerId,
-        parameters: {
-          callId,
-          leadName: get(current, "Full_Name"),
-          company: get(current, "Nom_de_la_compagnie"),
-          activity: get(current, "Activité 2.0 H.C."),
-          agent,
-          activityName: get(current, "Nom_de_l_Activite"),
-        },
-      };
+    const payload = {
+  To: to,               // destination
+  From: callerId,       // caller‑ID
+  Parameters: {         // <-- everything else lives here
+    callId,
+    leadName: get(current, "Full_Name"),
+    company: get(current, "Nom_de_la_compagnie"),
+    activity: get(current, "Activité 2.0 H.C."),
+    agent,
+    activityName: get(current, "Nom_de_l_Activite")
+  }
+};
+await fetch(`${STUDIO_API_URL}/create-execution`, {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify(payload)
+});
+
       const res = await fetch(`${STUDIO_API_URL}/create-execution`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -260,6 +267,7 @@ device?.connect({ params: { To: to } });
       setCurrentExecutionSid(json.executionSid);
       setStatus(`📞 Flow déclenché – ex ${json.executionSid.slice(-6)}`);
       setCallState(CALL_STATES.WAITING_OUTCOME);
+      setShowForm(true); // >>> Show form immediately when call starts
       // >>> start polling for outcome now
       startPollingOutcome(callId);
     } catch (err: any) {
