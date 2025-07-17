@@ -460,7 +460,7 @@ export default function PowerDialer() {
           </select>
         </div>
         <div className="grid md:grid-cols-2 gap-6 text-sm">
-          <div>s
+          <div>
             <h3 className="mb-2 font-semibold text-zinc-800">Infos Prospect</h3>
             <Field label="Nom" value={get(current, "Full_Name")} />
             <Field label="Poste" value={get(current, "Job_Title")} />

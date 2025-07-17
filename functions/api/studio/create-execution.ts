@@ -49,14 +49,32 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   }
 
   /* ---------- Call Twilio Studio REST API ---------- */
+    
+  //const resp = await fetch(
+    //  `https://studio.twilio.com/v2/Flows/${env.FLOW_SID}/Executions`,
+    //{
+    //  method: 'POST',
+    //  headers: {
+    //    Authorization:
+    //      'Basic ' +
+    //      btoa(`${env.TWILIO_ACCOUNT_SID}:${env.TWILIO_AUTH_TOKEN}`),
+    //    'Content-Type': 'application/x-www-form-urlencoded',
+    //  },
+    //  body: new URLSearchParams({
+    //    To: to,
+    //    From: from,
+    //    Parameters: JSON.stringify(parameters ?? {}),
+    //  }),
+    //}
+  //);
+let data;
+try {
   const resp = await fetch(
-      `https://studio.twilio.com/v2/Flows/${env.FLOW_SID}/Executions`,
+    `https://studio.twilio.com/v2/Flows/${env.FLOW_SID}/Executions`,
     {
       method: 'POST',
       headers: {
-        Authorization:
-          'Basic ' +
-          btoa(`${env.TWILIO_ACCOUNT_SID}:${env.TWILIO_AUTH_TOKEN}`),
+        Authorization: 'Basic ' + btoa(`${env.TWILIO_ACCOUNT_SID}:${env.TWILIO_AUTH_TOKEN}`),
         'Content-Type': 'application/x-www-form-urlencoded',
       },
       body: new URLSearchParams({
@@ -67,6 +85,58 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     }
   );
 
+  data = await resp.json();
+
+  if (!resp.ok) {
+    if (resp.status === 409 && data.code === 20409 && data.details?.conflicting_execution_sid) {
+      const conflictingSid = data.details.conflicting_execution_sid;
+      console.warn(`Ending conflicting execution: ${conflictingSid}`);
+
+      // End the conflicting one
+      await fetch(
+        `https://studio.twilio.com/v2/Flows/${env.FLOW_SID}/Executions/${conflictingSid}`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: 'Basic ' + btoa(`${env.TWILIO_ACCOUNT_SID}:${env.TWILIO_AUTH_TOKEN}`),
+            'Content-Type': 'application/x-www-form-urlencoded',
+          },
+          body: new URLSearchParams({ Status: 'ended' }),
+        }
+      );
+
+      // Retry the original create
+      const retryResp = await fetch(
+        `https://studio.twilio.com/v2/Flows/${env.FLOW_SID}/Executions`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: 'Basic ' + btoa(`${env.TWILIO_ACCOUNT_SID}:${env.TWILIO_AUTH_TOKEN}`),
+            'Content-Type': 'application/x-www-form-urlencoded',
+          },
+          body: new URLSearchParams({
+            To: to,
+            From: from,
+            Parameters: JSON.stringify(parameters ?? {}),
+          }),
+        }
+      );
+
+      data = await retryResp.json();
+      if (!retryResp.ok) throw new Error(`Retry failed: ${data.message}`);
+      console.log(`Retry successful for execution: ${data.sid}`);
+    } else {
+      throw new Error(data.message || 'Twilio error');
+    }
+  } else {
+    console.log(`Execution created successfully: ${data.sid}`, { to, from });
+  }
+} catch (error) {
+  console.error('Execution create failed:', (error as Error).message, { to, from });
+  return json({ error: (error as Error).message }, 500);
+}
+
+return json(data, 200);
   const data = await resp.json();
   return json(data, resp.status);
 };
