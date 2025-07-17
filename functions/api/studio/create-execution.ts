@@ -135,8 +135,8 @@ try {
   console.error('Execution create failed:', (error as Error).message, { to, from });
   return json({ error: (error as Error).message }, 500);
 }
-
-return json(data, 200);
+  return json({ success: true, ...data }, 200);
+//return json(data, 200); --- not needed anymore
 //  const data = await resp.json(); --- not needed anymore
 //  return json(data, resp.status); --- not needed anymore
 };
