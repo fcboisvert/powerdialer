@@ -164,5 +164,6 @@ function mapRecord(r: AirtableRecord) {
     Statut_de_l_Activite: f(F_STATUS),
     Resultat_Appel: f("Résultat (Appel)"),
     Opportunity: f("Opportunity"),
+    Activite_HC: f("Type d'Activité"),
   };
 }
