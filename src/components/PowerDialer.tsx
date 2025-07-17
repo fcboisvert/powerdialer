@@ -242,9 +242,9 @@ export default function PowerDialer() {
         body: JSON.stringify(payload),
       });
 
-      const json: { success: boolean; executionSid?: string; error?: string } = await res.json();
+      const json: { success: boolean; sid?: string; error?: string } = await res.json();
       
-      if (!json.success || !json.executionSid) {
+      if (!json.success || !json.sid) { //was !json.executionSid before change to !json.sid
         throw new Error(json.error || "API error");
       }
 
@@ -252,8 +252,8 @@ export default function PowerDialer() {
       device?.connect({ params: { To: to } });
 
       // Update states
-      setCurrentExecutionSid(json.executionSid);
-      setStatus(`📞 Flow déclenché – ex ${json.executionSid.slice(-6)}`);
+      setCurrentExecutionSid(json.sid);
+      setStatus(`📞 Flow déclenché – ex ${json.sid.slice(-6)}`);
       setCallState(CALL_STATES.WAITING_OUTCOME);
       setShowForm(true); // Show form immediately
       
@@ -265,7 +265,7 @@ export default function PowerDialer() {
         console.log("Dial states set:", { 
           callState: CALL_STATES.WAITING_OUTCOME, 
           showForm: true,
-          currentExecutionSid: json.executionSid 
+          currentExecutionSid: json.sid 
         });
       }
       
