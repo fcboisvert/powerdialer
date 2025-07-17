@@ -4,6 +4,10 @@ name = "powerdialer"
 compatibility_date = "2025-07-15"
 pages_build_output_dir = "./dist"
 
+kv_namespaces = [
+  { binding = "OUTCOMES_KV", id = "7bbc9e3c31d04d87893e4ceb06f75d43" }
+]
+
 [functions]
 external = ["jose"]
 
