@@ -67,7 +67,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     //  }),
     //}
   //);
-let data;
+let data: any;
 try {
   const resp = await fetch(
     `https://studio.twilio.com/v2/Flows/${env.FLOW_SID}/Executions`,
@@ -137,8 +137,8 @@ try {
 }
 
 return json(data, 200);
-  const data = await resp.json();
-  return json(data, resp.status);
+//  const data = await resp.json(); --- not needed anymore
+//  return json(data, resp.status); --- not needed anymore
 };
 
 /* ---------- Small helper ---------- */
