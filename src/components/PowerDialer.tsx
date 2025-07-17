@@ -463,9 +463,9 @@ export default function PowerDialer() {
           <div>
             <h3 className="mb-2 font-semibold text-zinc-800">Infos Prospect</h3>
             <Field label="Nom" value={get(current, "Full_Name")} />
-            <Field label="Fonction" value={get(current, "Job_Title")} />
+            <Field label="Poste" value={get(current, "Job_Title")} />
             <Field label="Entreprise" value={get(current, "Nom_de_la_compagnie")} />
-            <Field label="LinkedIn" value={get(current, "LinkedIn_URL")} />
+            <Field label="Profil LinkedIn" value={get(current, "LinkedIn_URL")} />
             <Field label="Téléphone mobile" value={get(current, "Mobile_Phone")} />
             <Field label="Téléphone direct" value={get(current, "Direct_Phone")} />
             <Field label="Téléphone entreprise" value={get(current, "Company_Phone")} /> 
@@ -473,8 +473,8 @@ export default function PowerDialer() {
           <div>
             <h3 className="mb-2 font-semibold text-zinc-800">Infos Activité</h3>
             <Field label="Nom de l'activité" value={get(current, "Nom_de_l_Activite")} />
-            <Field label="Type d'Activité" value={get(current, "Activite_HC")} />
-            <Field label="Responsable de l'Activité" value={get(current, "Nom du Responsable")} />
+            <Field label="Type d'activité" value={get(current, "Activite_HC")} />
+            <Field label="Nom du responsable" value={get(current, "Responsable")} />
             <Field label="Priorité" value={get(current, "Priorite")} />
             <Field label="Statut" value={get(current, "Statut_de_l_Activite", "À Faire")} />
           </div>
