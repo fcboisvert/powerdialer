@@ -468,12 +468,12 @@ export default function PowerDialer() {
             <Field label="LinkedIn" value={get(current, "LinkedIn_URL")} />
             <Field label="Téléphone mobile" value={get(current, "Mobile_Phone")} />
             <Field label="Téléphone direct" value={get(current, "Direct_Phone")} />
-            <Field label="Téléphone entreprise" value={get(current, "Company_Phone")} />
+            <Field label="Téléphone entreprise" value={get(current, "Company_Phone")} /> 
           </div>
           <div>
             <h3 className="mb-2 font-semibold text-zinc-800">Infos Activité</h3>
             <Field label="Nom de l'activité" value={get(current, "Nom_de_l_Activite")} />
-            <Field label="Type d'Activité" value={get(current, "Activité 2.0 H.C.")} />
+            <Field label="Type d'Activité" value={get(current, "Activite_HC")} />
             <Field label="Responsable de l'Activité" value={get(current, "Nom du Responsable")} />
             <Field label="Priorité" value={get(current, "Priorite")} />
             <Field label="Statut" value={get(current, "Statut_de_l_Activite", "À Faire")} />
