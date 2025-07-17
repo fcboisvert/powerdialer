@@ -474,7 +474,7 @@ export default function PowerDialer() {
             <h3 className="mb-2 font-semibold text-zinc-800">Infos Activité</h3>
             <Field label="Nom de l'activité" value={get(current, "Nom_de_l_Activite")} />
             <Field label="Type d'activité" value={get(current, "Activite_HC")} />
-            <Field label="Nom du responsable" value={get(current, "Responsable")} />
+            <Field label="Nom du responsable" value={get(current, "Nom_du_responsable")} />
             <Field label="Priorité" value={get(current, "Priorite")} />
             <Field label="Statut" value={get(current, "Statut_de_l_Activite", "À Faire")} />
           </div>
