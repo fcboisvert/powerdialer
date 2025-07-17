@@ -229,7 +229,7 @@ export default function PowerDialer() {
         callId,
         leadName: get(current, "Full_Name"),
         company: get(current, "Nom_de_la_compagnie"),
-        activity: get(current, "Activité 2.0 H.C."),
+        activity: get(current, "Activite_HC"), //was changed from old syntax
         agent,
         activityName: get(current, "Nom_de_l_Activite")
         }
