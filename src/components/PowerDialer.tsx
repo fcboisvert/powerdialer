@@ -81,6 +81,62 @@ export default function PowerDialer() {
   const current = records[idx] ?? {};
   const get = (obj: any, key: string, fb = "—") => Array.isArray(obj?.[key]) ? obj[key][0] ?? fb : obj?.[key] ?? fb;
 
+  async function updateCallResult(
+  result: string,
+  notes: string,
+  meetingNotes?: string,
+  meetingDatetime?: string,
+  forceStatutFait = false // new parameter for auto-saves
+) {
+  const payload = {
+    outcome: result === "Boite_Vocale" ? "Répondeur" : result === "Pas_Joignable" ? "Pas_Joignable" : result,
+    number:
+      get(current, "Mobile_Phone") ||
+      get(current, "Direct_Phone") ||
+      get(current, "Company_Phone"),
+    activity: get(current, "Nom_de_l_Activite"),
+    activityName: get(current, "Nom_de_l_Activite"),
+    callId: current?.id || "unknown-call-id",
+    agent,
+    script: get(current, "Message_content"),
+    statut: forceStatutFait ? "Fait" : undefined,
+  };
+
+  if (["Boite_Vocale", "Pas_Joignable"].includes(result)) {
+    try {
+      const res = await fetch("https://texion.app/api/call-outcome", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) throw new Error("Call outcome API failed");
+      console.log("✅ API logged:", result);
+    } catch (err: any) {
+      console.error("❌ API call-outcome error:", err.message);
+    }
+  } else {
+    try {
+      const res = await fetch(AIRTABLE_UPDATE_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          recordId: current.id,
+          activityName: get(current, "Nom_de_l_Activite"),
+          result,
+          notes,
+          agent,
+          meetingNotes,
+          meetingDatetime,
+          statut: "Fait",
+        }),
+      });
+      if (!res.ok) throw new Error("Airtable update API failed");
+      console.log("✅ Airtable updated:", result);
+    } catch (err: any) {
+      console.error("❌ Airtable update error:", err.message);
+    }
+  }
+}
   
   // ------------------------------------------------------------------
   // Helper to start polling KV for outcome until we get it or timeout
@@ -118,44 +174,32 @@ const startPollingOutcome = (callId: string) => {
       const data: { outcome?: string } = await res.json();
       console.log(`[PowerDialer] Poll response data:`, data); 
     
+// Fix for PowerDialer.tsx - auto-saving call outcome and ensuring Statut = "Fait" is saved correctly
 
-      if (data?.outcome && ["Boite_Vocale", "Pas_Joignable"].includes(data.outcome)) {
-        const outcome = data.outcome as CallResult;
-        console.log(`[PowerDialer] Outcome detected: ${outcome}`);
+// Update the polling detection block (inside startPollingOutcome) like this:
+if (data?.outcome && ["Boite_Vocale", "Pas_Joignable"].includes(data.outcome)) {
+  const outcome = data.outcome as CallResult;
+  console.log(`[PowerDialer] Outcome detected: ${outcome}`);
 
-        setCallResult(outcome);
-        setCallState(CALL_STATES.COMPLETED);
-        setStatus(`📞 ${outcome}`);
-        setShowForm(true);
+  setCallResult(outcome);
+  setCallState(CALL_STATES.COMPLETED);
+  setStatus(`📞 ${outcome}`);
+  setShowForm(true);
 
-        setTimeout(() => {
-        console.log("[PowerDialer] Auto-saving outcome and continuing...");
+  // Bypass the form, save directly and set Statut = "Fait"
+  setTimeout(() => {
+    console.log("[PowerDialer] Auto-saving outcome with Statut=Fait and continuing...");
+    updateCallResult(outcome, "Auto-detected result", "", "", true)
+      .then(() => {
+        setTimeout(() => next(), 500); // Advance after save
+      })
+      .catch((err) => console.error("[PowerDialer] Auto-save failed:", err));
+  }, 300);
 
-        // Wait for React state to flush before proceeding
-        requestAnimationFrame(() => {
-        if (callResult === "S_O") {
-          console.warn("[PowerDialer] Warning: callResult not set yet, retrying...");
-          setTimeout(() => saveAndNext(), 200); // retry once
-        } else {
-          saveAndNext();
-        }
-  });
-}, 500);
-
-
-      } else {
-        setTimeout(poll, delay);
-      }
-    } catch (err) {
-      console.error("Polling error:", err);
-      setTimeout(poll, delay);
-    }
-  };
-
-  poll(); 
-};
-
-
+} else {
+  setTimeout(poll, delay);
+}
+   
   // ------------------------------------------------------------------
   // Fetch queue
   // ------------------------------------------------------------------
@@ -377,62 +421,6 @@ const startPollingOutcome = (callId: string) => {
     }, 1000);
   };
 
-  async function updateCallResult(
-    result: string,
-    notes: string,
-    meetingNotes?: string,
-    meetingDatetime?: string
-  ) {
-    const payload = {
-      outcome: result === "Boite_Vocale" ? "Répondeur" : result === "Pas_Joignable" ? "Pas_Joignable" : result,
-      number:
-        get(current, "Mobile_Phone") ||
-        get(current, "Direct_Phone") ||
-        get(current, "Company_Phone"),
-      activity: get(current, "Nom_de_l_Activite"),
-      activityName: get(current, "Nom_de_l_Activite"),
-      callId: current?.id || "unknown-call-id",
-      agent,
-      script: get(current, "Message_content"),
-      statut: "Fait", // ✅ Add this line here
-    };
-
-    if (["Boite_Vocale", "Pas_Joignable"].includes(result)) {
-      try {
-        const res = await fetch("https://texion.app/api/call-outcome", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        });
-
-        if (!res.ok) throw new Error("Call outcome API failed");
-        console.log("✅ API logged:", result);
-      } catch (err: any) {
-        console.error("❌ API call-outcome error:", err.message);
-      }
-    } else {
-      try {
-        const res = await fetch(AIRTABLE_UPDATE_URL, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            recordId: current.id,
-            activityName: get(current, "Nom_de_l_Activite"),
-            result,
-            notes,
-            agent,
-            meetingNotes,
-            meetingDatetime,
-            statut: "Fait",
-          }),
-        });
-        if (!res.ok) throw new Error("Airtable update API failed");
-        console.log("✅ Airtable updated:", result);
-      } catch (err: any) {
-        console.error("❌ Airtable update error:", err.message);
-      }
-    }
-  }
 
   const logout = () => {
     if (callState !== CALL_STATES.IDLE) {
