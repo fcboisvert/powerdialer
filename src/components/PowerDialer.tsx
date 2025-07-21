@@ -577,7 +577,7 @@ const startPollingOutcome = (callId: string) => {
             script={get(current, "Message_content")}
             onCallResultChange={setCallResult}
             onCallNotesChange={setCallNotes}
-            onMeetingNotesChange={setMeetingNotes}
+            onMeetingNotesChange={setMeetingNotes} 
             onMeetingDatetimeChange={setMeetingDatetime}
             onSubmit={saveAndNext}
           />

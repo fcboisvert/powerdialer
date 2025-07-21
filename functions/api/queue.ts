@@ -165,6 +165,7 @@ function mapRecord(r: AirtableRecord) {
     Resultat_Appel: f("Résultat (Appel)"),
     Opportunity: f("Opportunity"),
     Activite_HC: f("Activité HC"),
-    Nom_du_responsable: f("Nom du Responsable"),
+    Nom_du_responsable: f("Nom du Responsable"), 
+    Message_content: f("Message content"), 
   };
 }
