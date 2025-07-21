@@ -117,6 +117,7 @@ const startPollingOutcome = (callId: string) => {
 
       const data: { outcome?: string } = await res.json();
       console.log(`[PowerDialer] Poll response data:`, data); 
+    
 
       if (data?.outcome && ["Boite_Vocale", "Pas_Joignable"].includes(data.outcome)) {
         const outcome = data.outcome as CallResult;
