@@ -4,7 +4,8 @@ import type { KVNamespace } from '@cloudflare/workers-types';
 interface Env {
   OUTCOMES_KV: KVNamespace;
 }
-  const validOutcomes = ['Boite_Vocale', 'Pas_Joignable'] as const;
+
+const validOutcomes = ['Boite_Vocale', 'Pas_Joignable'] as const;
 
 interface CallOutcomePayload {
   outcome: 'Boite_Vocale' | 'Pas_Joignable';
@@ -16,8 +17,7 @@ interface CallOutcomePayload {
 }
 
 export const onRequest: PagesFunction<Env> = async (ctx) => {
-
-  const { request } = ctx;
+  const { request, env } = ctx;
   
   // --- CORS -----------------------------------------------------------
   const corsHeaders = {
@@ -48,7 +48,7 @@ export const onRequest: PagesFunction<Env> = async (ctx) => {
     );
   }
 
-  const { outcome, callId, agent } = payload;
+  const { outcome, callId, agent, activityName } = payload;
 
   if (!outcome || !callId || !agent) {
     return new Response(
@@ -57,7 +57,7 @@ export const onRequest: PagesFunction<Env> = async (ctx) => {
     );
   }
 
-  // --- Parse + validate payload --------------------------------------
+  // --- Validate outcome --------------------------------------
   if (!validOutcomes.includes(outcome)) {
     return new Response(
       JSON.stringify({ error: `Invalid outcome. Must be one of: ${validOutcomes.join(', ')}` }),
@@ -65,14 +65,30 @@ export const onRequest: PagesFunction<Env> = async (ctx) => {
     );
   }
 
-     const res = await fetch('https://texion.app/api/airtable/update-result', {
+  // --- CRITICAL: Store outcome in KV for frontend polling ---
+  try {
+    // Store with 5 minute TTL to auto-cleanup
+    await env.OUTCOMES_KV.put(callId, outcome, { expirationTtl: 300 });
+    console.log(`[call-outcome] Stored outcome in KV: ${callId} = ${outcome}`);
+  } catch (error) {
+    console.error('[call-outcome] KV write failed:', error);
+    console.error('[call-outcome] env.OUTCOMES_KV:', env.OUTCOMES_KV);
+    return new Response(
+      JSON.stringify({ error: 'Failed to store outcome', details: (error as Error).message }),
+      { status: 500, headers: { 'content-type': 'application/json', ...corsHeaders } }
+    );
+  }
+
+  // --- Update Airtable (existing code) ---
+  try {
+    const res = await fetch('https://texion.app/api/airtable/update-result', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        activityName: payload.activityName,
-        result: outcome,
+        activityName: activityName,
+        result: outcome === 'Boite_Vocale' ? 'Répondeur' : outcome,
         notes: '',
-        agent: payload.agent,
+        agent: agent,
         meetingNotes: '',
         meetingDatetime: '',
         statut: 'Fait',
@@ -84,6 +100,9 @@ export const onRequest: PagesFunction<Env> = async (ctx) => {
     } else {
       console.log('[call-outcome] Airtable updated ✔', outcome);
     }
+  } catch (error) {
+    console.error('[call-outcome] Airtable update error:', error);
+  }
 
   // --- Success response ----------------------------------------------
   return new Response(
