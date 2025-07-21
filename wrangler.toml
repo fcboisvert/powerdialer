@@ -1,21 +1,8 @@
-# wrangler.toml
-
 name = "powerdialer"
 compatibility_date = "2025-07-15"
 pages_build_output_dir = "./dist"
 
-kv_namespaces = [
-  { binding = "OUTCOMES_KV", id = "7bbc9e3c31d04d87893e4ceb06f75d43", preview_id = "4712224be26b4380aa69ae146fb8d351" }
-]
-
-[functions]
-external = ["jose"]
-
-[env.production]
-name = "powerdialer"
-compatibility_date = "2025-07-15"
-
-# ⬇️ Secrets already added via dashboard
-# npx wrangler secret put commands commented out since managed in UI
-# [observability.logs]  # Commented out—Pages doesn't support; enable via Worker dashboard
-# enabled = true
+[[kv_namespaces]]
+binding = "OUTCOMES_KV"
+id = "7bbc9e3c31d04d87893e4ceb06f75d43"
+preview_id = "4712224be26b4380aa69ae146fb8d351"
