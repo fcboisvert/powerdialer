@@ -129,9 +129,19 @@ const startPollingOutcome = (callId: string) => {
         setShowForm(true);
 
         setTimeout(() => {
-          console.log("[PowerDialer] Auto-saving outcome and continuing...");
-          saveAndNext(); // manually trigger result save and next contact
-        }, 500);
+        console.log("[PowerDialer] Auto-saving outcome and continuing...");
+
+        // Wait for React state to flush before proceeding
+        requestAnimationFrame(() => {
+        if (callResult === "S_O") {
+          console.warn("[PowerDialer] Warning: callResult not set yet, retrying...");
+          setTimeout(() => saveAndNext(), 200); // retry once
+        } else {
+          saveAndNext();
+        }
+  });
+}, 500);
+
 
       } else {
         setTimeout(poll, delay);
@@ -384,6 +394,7 @@ const startPollingOutcome = (callId: string) => {
       callId: current?.id || "unknown-call-id",
       agent,
       script: get(current, "Message_content"),
+      statut: "Fait", // ✅ Add this line here
     };
 
     if (["Boite_Vocale", "Pas_Joignable"].includes(result)) {
@@ -393,6 +404,7 @@ const startPollingOutcome = (callId: string) => {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
         });
+
         if (!res.ok) throw new Error("Call outcome API failed");
         console.log("✅ API logged:", result);
       } catch (err: any) {
