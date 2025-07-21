@@ -86,21 +86,31 @@ export default function PowerDialer() {
   // ------------------------------------------------------------------
   // Helper to start polling KV for outcome until we get it or timeout
   // ------------------------------------------------------------------
-  const startPollingOutcome = (callId: string) => {
-    let attempts = 0;
-    if (pollRef.current) clearInterval(pollRef.current);
+const startPollingOutcome = (callId: string) => {
+  console.log(`[PowerDialer] Starting to poll for callId: "${callId}"`);
+  console.log(`[PowerDialer] callId length: ${callId.length}`);
+  console.log(`[PowerDialer] Full URL: ${OUTCOME_POLL_URL}?callId=${callId}`);
+  
+  let attempts = 0;
+  if (pollRef.current) clearInterval(pollRef.current);
 
-    pollRef.current = setInterval(async () => {
-      if (attempts++ > 10) {
-        clearInterval(pollRef.current!);
-        return;
-      }
+  pollRef.current = setInterval(async () => {
+    if (attempts++ > 10) {
+      clearInterval(pollRef.current!);
+      return;
+    }
 
-      try {
-        const res = await fetch(`${OUTCOME_POLL_URL}?callId=${callId}`);
-        if (!res.ok) return;
+    try {
+      const url = `${OUTCOME_POLL_URL}?callId=${callId}`;
+      console.log(`[PowerDialer] Polling attempt ${attempts} for URL: ${url}`);
+      
+      const res = await fetch(url);
+      console.log(`[PowerDialer] Response status: ${res.status}`);
+      
+      if (!res.ok) return;
 
-        const data: { outcome?: string } = await res.json();
+      const data: { outcome?: string } = await res.json();
+      console.log(`[PowerDialer] Poll response data:`, data);
         if (
           data?.outcome &&
           ["Boite_Vocale", "Pas_Joignable"].includes(data.outcome)
@@ -258,7 +268,12 @@ export default function PowerDialer() {
       setShowForm(true); // Show form immediately
       
       // Start polling for outcome
-      startPollingOutcome(callId);
+      // Delay polling for outcome to avoid race with Twilio HTTP callback
+      setTimeout(() => {
+        console.log(`[PowerDialer] Starting delayed polling for callId: ${callId}`);
+        startPollingOutcome(callId);
+      }, 1500); // 1.5 seconds delay
+
 
       // Debug logging only in development
       if (import.meta.env.DEV) {
