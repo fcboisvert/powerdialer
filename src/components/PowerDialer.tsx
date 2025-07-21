@@ -59,7 +59,6 @@ const CALL_STATES = {
 export default function PowerDialer() {
   const navigate = useNavigate();
   // >>> ref to store interval id so we can clear it
-  const pollRef = useRef<NodeJS.Timeout | null>(null);
   // === STATE ===
   const [records, setRecords] = useState<CallRecord[]>([]);
   const [loading, setLoading] = useState(true);
@@ -86,64 +85,67 @@ export default function PowerDialer() {
   // ------------------------------------------------------------------
   // Helper to start polling KV for outcome until we get it or timeout
   // ------------------------------------------------------------------
+ const clearPollingOutcome = () => {
+  // Nothing to cancel yet — placeholder for future polling cancel logic
+};
 const startPollingOutcome = (callId: string) => {
   console.log(`[PowerDialer] Starting to poll for callId: "${callId}"`);
   console.log(`[PowerDialer] callId length: ${callId.length}`);
   console.log(`[PowerDialer] Full URL: ${OUTCOME_POLL_URL}?callId=${callId}`);
-  
-  let attempts = 0;
-  if (pollRef.current) clearInterval(pollRef.current);
 
-  pollRef.current = setInterval(async () => {
-    if (attempts++ > 10) {
-      clearInterval(pollRef.current!);
+  let attempts = 0;
+  const maxAttempts = 30; // ~2 minutes
+  const delay = 4000; // 4 seconds per attempt
+
+  const poll = async () => {
+    if (attempts++ >= maxAttempts) {
+      console.warn(`[PowerDialer] Polling timed out after ${attempts} attempts`);
       return;
     }
 
+    const url = `${OUTCOME_POLL_URL}?callId=${callId}`;
+    console.log(`[PowerDialer] Polling attempt ${attempts} for URL: ${url}`);
+
     try {
-      const url = `${OUTCOME_POLL_URL}?callId=${callId}`;
-      console.log(`[PowerDialer] Polling attempt ${attempts} for URL: ${url}`);
-      
       const res = await fetch(url);
       console.log(`[PowerDialer] Response status: ${res.status}`);
-      
-      if (!res.ok) return;
+
+      if (!res.ok) {
+        setTimeout(poll, delay);
+        return;
+      }
 
       const data: { outcome?: string } = await res.json();
       console.log(`[PowerDialer] Poll response data:`, data);
-        if (
-          data?.outcome &&
-          ["Boite_Vocale", "Pas_Joignable"].includes(data.outcome)
-        ) {
-          clearInterval(pollRef.current!);
 
-          const outcome = data.outcome as CallResult ;
+      if (data?.outcome && ["Boite_Vocale", "Pas_Joignable"].includes(data.outcome)) {
+        const outcome = data.outcome as CallResult;
+        console.log(`[PowerDialer] Outcome detected: ${outcome}`);
 
-            setCallResult(outcome);
-            setCallState(CALL_STATES.COMPLETED);
-            setStatus(`📞 ${outcome}`);
-            setShowForm(true);
-          
-          // Auto-submit if outcome is auto-resolved (Boite_Vocale or Pas_Joignable)
-            setTimeout(() => {
-              const form = document.querySelector("form");
-              if (form && 'requestSubmit' in form) {
-                form.requestSubmit();
-              }
-            }, 500); // Increased delay to ensure form is fully rendered
-        }
-      } catch (err: any) {
-        console.error("Polling error:", err);
+        setCallResult(outcome);
+        setCallState(CALL_STATES.COMPLETED);
+        setStatus(`📞 ${outcome}`);
+        setShowForm(true);
+
+        // Auto-submit if outcome is auto-resolved
+        setTimeout(() => {
+          const form = document.querySelector("form");
+          if (form && "requestSubmit" in form) {
+            form.requestSubmit();
+          }
+        }, 500);
+      } else {
+        setTimeout(poll, delay);
       }
-    }, 4000);
+    } catch (err) {
+      console.error("Polling error:", err);
+      setTimeout(poll, delay);
+    }
   };
 
-  const clearPollingOutcome = () => {
-    if (pollRef.current) {
-      clearInterval(pollRef.current);
-      pollRef.current = null;
-    }
-  }
+  poll(); 
+};
+
 
   // ------------------------------------------------------------------
   // Fetch queue
