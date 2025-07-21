@@ -116,7 +116,7 @@ const startPollingOutcome = (callId: string) => {
       }
 
       const data: { outcome?: string } = await res.json();
-      console.log(`[PowerDialer] Poll response data:`, data);
+      console.log(`[PowerDialer] Poll response data:`, data); 
 
       if (data?.outcome && ["Boite_Vocale", "Pas_Joignable"].includes(data.outcome)) {
         const outcome = data.outcome as CallResult;
@@ -127,13 +127,11 @@ const startPollingOutcome = (callId: string) => {
         setStatus(`📞 ${outcome}`);
         setShowForm(true);
 
-        // Auto-submit if outcome is auto-resolved
         setTimeout(() => {
-          const form = document.querySelector("form");
-          if (form && "requestSubmit" in form) {
-            form.requestSubmit();
-          }
+          console.log("[PowerDialer] Auto-saving outcome and continuing...");
+          saveAndNext(); // manually trigger result save and next contact
         }, 500);
+
       } else {
         setTimeout(poll, delay);
       }
