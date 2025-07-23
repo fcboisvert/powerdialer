@@ -55,7 +55,6 @@ const CALL_STATES = {
   ERROR: "error",
 } as const;
 
-
 export default function PowerDialer() {
   const navigate = useNavigate();
   // >>> ref to store interval id so we can clear it
@@ -71,98 +70,109 @@ export default function PowerDialer() {
   ) as "frederic" | "simon";
   const agent = AGENT_NAME_MAP[agentKey];
   const [callerId, setCallerId] = useState(AGENT_CALLER_IDS[agent][0]);
-  const [callState, setCallState] = useState<(typeof CALL_STATES)[keyof typeof CALL_STATES]>(CALL_STATES.IDLE);
+  const [callState, setCallState] = useState<
+    (typeof CALL_STATES)[keyof typeof CALL_STATES]
+  >(CALL_STATES.IDLE);
   const [showForm, setShowForm] = useState(false);
-  const [currentExecutionSid, setCurrentExecutionSid] = useState<string | null>(null);
+  const [currentExecutionSid, setCurrentExecutionSid] = useState<string | null>(
+    null
+  );
   const [callResult, setCallResult] = useState<CallResult>("S_O");
   const [callNotes, setCallNotes] = useState("");
   const [meetingNotes, setMeetingNotes] = useState("");
   const [meetingDatetime, setMeetingDatetime] = useState("");
   const current = records[idx] ?? {};
-  const get = (obj: any, key: string, fb = "—") => Array.isArray(obj?.[key]) ? obj[key][0] ?? fb : obj?.[key] ?? fb;
+  const get = (obj: any, key: string, fb = "—") =>
+    Array.isArray(obj?.[key]) ? obj[key][0] ?? fb : obj?.[key] ?? fb;
 
   async function updateCallResult(
-  result: string,
-  notes: string,
-  meetingNotes?: string,
-  meetingDatetime?: string,
-  forceStatutFait = false // new parameter for auto-saves
-) {
-  const payload = {
-    outcome: result === "Boite_Vocale" ? "Répondeur" : result === "Pas_Joignable" ? "Pas_Joignable" : result,
-    number:
-      get(current, "Mobile_Phone") ||
-      get(current, "Direct_Phone") ||
-      get(current, "Company_Phone"),
-    activity: get(current, "Nom_de_l_Activite"),
-    activityName: get(current, "Nom_de_l_Activite"),
-    callId: current?.id || "unknown-call-id",
-    agent,
-    script: get(current, "Message_content"),
-    statut: forceStatutFait ? "Fait" : undefined,
-  };
+    result: string,
+    notes: string,
+    meetingNotes?: string,
+    meetingDatetime?: string,
+    forceStatutFait = false // new parameter for auto-saves
+  ) {
+    const payload = {
+      outcome:
+        result === "Boite_Vocale"
+          ? "Répondeur"
+          : result === "Pas_Joignable"
+          ? "Pas_Joignable"
+          : result,
+      number:
+        get(current, "Mobile_Phone") ||
+        get(current, "Direct_Phone") ||
+        get(current, "Company_Phone"),
+      activity: get(current, "Nom_de_l_Activite"),
+      activityName: get(current, "Nom_de_l_Activite"),
+      callId: current?.id || "unknown-call-id",
+      agent,
+      script: get(current, "Message_content"),
+      statut: forceStatutFait ? "Fait" : undefined,
+    };
 
-  if (["Boite_Vocale", "Pas_Joignable"].includes(result)) {
-    try {
-      const res = await fetch("https://texion.app/api/call-outcome", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      if (!res.ok) throw new Error("Call outcome API failed");
-      console.log("✅ API logged:", result);
-    } catch (err: any) {
-      console.error("❌ API call-outcome error:", err.message);
-    }
-  } else {
-    try {
-      const res = await fetch(AIRTABLE_UPDATE_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          recordId: current.id,
-          activityName: get(current, "Nom_de_l_Activite"),
-          result,
-          notes,
-          agent,
-          meetingNotes,
-          meetingDatetime,
-          statut: "Fait",
-        }),
-      });
-      if (!res.ok) throw new Error("Airtable update API failed");
-      console.log("✅ Airtable updated:", result);
-    } catch (err: any) {
-      console.error("❌ Airtable update error:", err.message);
+    if (["Boite_Vocale", "Pas_Joignable"].includes(result)) {
+      try {
+        const res = await fetch("https://texion.app/api/call-outcome", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        if (!res.ok) throw new Error("Call outcome API failed");
+        console.log("✅ API logged:", result);
+      } catch (err: any) {
+        console.error("❌ API call-outcome error:", err.message);
+      }
+    } else {
+      try {
+        const res = await fetch(AIRTABLE_UPDATE_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            recordId: current.id,
+            activityName: get(current, "Nom_de_l_Activite"),
+            result,
+            notes,
+            agent,
+            meetingNotes,
+            meetingDatetime,
+            statut: "Fait",
+          }),
+        });
+        if (!res.ok) throw new Error("Airtable update API failed");
+        console.log("✅ Airtable updated:", result);
+      } catch (err: any) {
+        console.error("❌ Airtable update error:", err.message);
+      }
     }
   }
-}
-  
+
   // ------------------------------------------------------------------
   // Helper to start polling KV for outcome until we get it or timeout
   // ------------------------------------------------------------------
- const clearPollingOutcome = () => {
-  // Nothing to cancel yet — placeholder for future polling cancel logic
-};
-const startPollingOutcome = (callId: string) => {
-  console.log(`[PowerDialer] Starting to poll for callId: "${callId}"`);
-  console.log(`[PowerDialer] callId length: ${callId.length}`);
-  console.log(`[PowerDialer] Full URL: ${OUTCOME_POLL_URL}?callId=${callId}`);
+  const clearPollingOutcome = () => {
+    // Nothing to cancel yet — placeholder for future polling cancel logic
+  };
+  const startPollingOutcome = (callId: string) => {
+    console.log(`[PowerDialer] Starting to poll for callId: "${callId}"`);
+    console.log(`[PowerDialer] callId length: ${callId.length}`);
+    console.log(`[PowerDialer] Full URL: ${OUTCOME_POLL_URL}?callId=${callId}`);
 
-  let attempts = 0;
-  const maxAttempts = 30; // ~2 minutes
-  const delay = 4000; // 4 seconds per attempt
+    let attempts = 0;
+    const maxAttempts = 30; // ~2 minutes
+    const delay = 4000; // 4 seconds per attempt
 
-  const poll = async () => {
-    if (attempts++ >= maxAttempts) {
-      console.warn(`[PowerDialer] Polling timed out after ${attempts} attempts`);
-      return;
-    }
+    const poll = async () => {
+      if (attempts++ >= maxAttempts) {
+        console.warn(
+          `[PowerDialer] Polling timed out after ${attempts} attempts`
+        );
+        return;
+      }
 
-    const url = `${OUTCOME_POLL_URL}?callId=${callId}`;
-    console.log(`[PowerDialer] Polling attempt ${attempts} for URL: ${url}`);
+      const url = `${OUTCOME_POLL_URL}?callId=${callId}`;
+      console.log(`[PowerDialer] Polling attempt ${attempts} for URL: ${url}`);
 
-    try {
       const res = await fetch(url);
       console.log(`[PowerDialer] Response status: ${res.status}`);
 
@@ -172,34 +182,42 @@ const startPollingOutcome = (callId: string) => {
       }
 
       const data: { outcome?: string } = await res.json();
-      console.log(`[PowerDialer] Poll response data:`, data); 
-    
-// Fix for PowerDialer.tsx - auto-saving call outcome and ensuring Statut = "Fait" is saved correctly
+      console.log(`[PowerDialer] Poll response data:`, data);
 
-// Update the polling detection block (inside startPollingOutcome) like this:
-if (data?.outcome && ["Boite_Vocale", "Pas_Joignable"].includes(data.outcome)) {
-  const outcome = data.outcome as CallResult;
-  console.log(`[PowerDialer] Outcome detected: ${outcome}`);
+      // Fix for PowerDialer.tsx - auto-saving call outcome and ensuring Statut = "Fait" is saved correctly
 
-  setCallResult(outcome);
-  setCallState(CALL_STATES.COMPLETED);
-  setStatus(`📞 ${outcome}`);
-  setShowForm(true);
+      // Update the polling detection block (inside startPollingOutcome) like this:
+      if (
+        data?.outcome &&
+        ["Boite_Vocale", "Pas_Joignable"].includes(data.outcome)
+      ) {
+        const outcome = data.outcome as CallResult;
+        console.log(`[PowerDialer] Outcome detected: ${outcome}`);
 
-  // Bypass the form, save directly and set Statut = "Fait"
-  setTimeout(() => {
-    console.log("[PowerDialer] Auto-saving outcome with Statut=Fait and continuing...");
-    updateCallResult(outcome, "Auto-detected result", "", "", true)
-      .then(() => {
-        setTimeout(() => next(), 500); // Advance after save
-      })
-      .catch((err) => console.error("[PowerDialer] Auto-save failed:", err));
-  }, 300);
+        setCallResult(outcome);
+        setCallState(CALL_STATES.COMPLETED);
+        setStatus(`📞 ${outcome}`);
+        setShowForm(true);
 
-} else {
-  setTimeout(poll, delay);
-}
-   
+        // Bypass the form, save directly and set Statut = "Fait"
+        setTimeout(() => {
+          console.log(
+            "[PowerDialer] Auto-saving outcome with Statut=Fait and continuing..."
+          );
+          updateCallResult(outcome, "Auto-detected result", "", "", true)
+            .then(() => {
+              setTimeout(() => next(), 500); // Advance after save
+            })
+            .catch((err) =>
+              console.error("[PowerDialer] Auto-save failed:", err)
+            );
+        }, 300);
+      } else {
+        setTimeout(poll, delay);
+      }
+    };
+  };
+
   // ------------------------------------------------------------------
   // Fetch queue
   // ------------------------------------------------------------------
@@ -224,12 +242,15 @@ if (data?.outcome && ["Boite_Vocale", "Pas_Joignable"].includes(data.outcome)) {
 
   // Simplified Twilio device initialization
   useEffect(() => {
-    initTwilioDevice(agentKey);   // ✅ already passes the identity
+    initTwilioDevice(agentKey); // ✅ already passes the identity
   }, [agentKey]);
 
   // Ensure form is visible when in appropriate states
   useEffect(() => {
-    if (callState === CALL_STATES.WAITING_OUTCOME || callState === CALL_STATES.COMPLETED) {
+    if (
+      callState === CALL_STATES.WAITING_OUTCOME ||
+      callState === CALL_STATES.COMPLETED
+    ) {
       setShowForm(true);
     }
   }, [callState]);
@@ -240,22 +261,24 @@ if (data?.outcome && ["Boite_Vocale", "Pas_Joignable"].includes(data.outcome)) {
       setStatus("Opération en cours...");
       return;
     }
-    
+
     // Get phone number
-    const raw = get(current, "Mobile_Phone") || 
-                get(current, "Direct_Phone") || 
-                get(current, "Company_Phone");
+    const raw =
+      get(current, "Mobile_Phone") ||
+      get(current, "Direct_Phone") ||
+      get(current, "Company_Phone");
 
     if (!raw || raw === "—") return setStatus("Aucun numéro valide !");
-    
+
     const digits = raw.replace(/\D/g, "");
-    const to = digits.length === 10
-      ? `+1${digits}`
-      : digits.length === 11 && digits.startsWith("1")
-      ? `+${digits}`
-      : raw.startsWith("+")
-      ? raw
-      : null;
+    const to =
+      digits.length === 10
+        ? `+1${digits}`
+        : digits.length === 11 && digits.startsWith("1")
+        ? `+${digits}`
+        : raw.startsWith("+")
+        ? raw
+        : null;
 
     if (!to || !/^\+\d{10,15}$/.test(to)) {
       setStatus("Numéro de destination invalide !");
@@ -280,25 +303,27 @@ if (data?.outcome && ["Boite_Vocale", "Pas_Joignable"].includes(data.outcome)) {
 
     try {
       // Generate call ID
-      const callId = typeof crypto.randomUUID === "function"
-        ? crypto.randomUUID()
-        : Date.now().toString();
+      const callId =
+        typeof crypto.randomUUID === "function"
+          ? crypto.randomUUID()
+          : Date.now().toString();
 
       (current as any).id = callId;
 
       // Create payload with proper casing
       const payload = {
-      to: to,  // lowercase
-      from: callerId,  // lowercase
-      parameters: {  // lowercase here too if function expects it, but it's Parameters in API so fine
-        callId,
-        leadName: get(current, "Full_Name"),
-        company: get(current, "Nom_de_la_compagnie"),
-        activity: get(current, "Activite_HC"), //was changed from old syntax
-        agent,
-        activityName: get(current, "Nom_de_l_Activite")
-        }
-    };
+        to: to, // lowercase
+        from: callerId, // lowercase
+        parameters: {
+          // lowercase here too if function expects it, but it's Parameters in API so fine
+          callId,
+          leadName: get(current, "Full_Name"),
+          company: get(current, "Nom_de_la_compagnie"),
+          activity: get(current, "Activite_HC"), //was changed from old syntax
+          agent,
+          activityName: get(current, "Nom_de_l_Activite"),
+        },
+      };
 
       // Trigger the Studio flow
       const res = await fetch(`${STUDIO_API_URL}/create-execution`, {
@@ -307,9 +332,11 @@ if (data?.outcome && ["Boite_Vocale", "Pas_Joignable"].includes(data.outcome)) {
         body: JSON.stringify(payload),
       });
 
-      const json: { success: boolean; sid?: string; error?: string } = await res.json();
-      
-      if (!json.success || !json.sid) { //was !json.executionSid before change to !json.sid
+      const json: { success: boolean; sid?: string; error?: string } =
+        await res.json();
+
+      if (!json.success || !json.sid) {
+        //was !json.executionSid before change to !json.sid
         throw new Error(json.error || "API error");
       }
 
@@ -321,24 +348,24 @@ if (data?.outcome && ["Boite_Vocale", "Pas_Joignable"].includes(data.outcome)) {
       setStatus(`📞 Flow déclenché – ex ${json.sid.slice(-6)}`);
       setCallState(CALL_STATES.WAITING_OUTCOME);
       setShowForm(true); // Show form immediately
-      
+
       // Start polling for outcome
       // Delay polling for outcome to avoid race with Twilio HTTP callback
       setTimeout(() => {
-        console.log(`[PowerDialer] Starting delayed polling for callId: ${callId}`);
+        console.log(
+          `[PowerDialer] Starting delayed polling for callId: ${callId}`
+        );
         startPollingOutcome(callId);
       }, 1500); // 1.5 seconds delay
 
-
       // Debug logging only in development
       if (import.meta.env.DEV) {
-        console.log("Dial states set:", { 
-          callState: CALL_STATES.WAITING_OUTCOME, 
+        console.log("Dial states set:", {
+          callState: CALL_STATES.WAITING_OUTCOME,
           showForm: true,
-          currentExecutionSid: json.sid 
+          currentExecutionSid: json.sid,
         });
       }
-      
     } catch (err: any) {
       setCallState(CALL_STATES.ERROR);
       setStatus(`❌ Erreur : ${err.message}`);
@@ -352,7 +379,10 @@ if (data?.outcome && ["Boite_Vocale", "Pas_Joignable"].includes(data.outcome)) {
         await fetch(`${STUDIO_API_URL}/end-execution`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ flowSid: FLOW_SID, executionSid: currentExecutionSid }),
+          body: JSON.stringify({
+            flowSid: FLOW_SID,
+            executionSid: currentExecutionSid,
+          }),
         });
       } catch (error: any) {
         setStatus(`❌ Erreur lors de l'arrêt : ${error.message}`);
@@ -372,7 +402,10 @@ if (data?.outcome && ["Boite_Vocale", "Pas_Joignable"].includes(data.outcome)) {
     setStatus("🎭 Simulation d'appel...");
     setShowForm(true);
 
-    const callId = typeof crypto.randomUUID === "function" ? crypto.randomUUID() : Date.now().toString();
+    const callId =
+      typeof crypto.randomUUID === "function"
+        ? crypto.randomUUID()
+        : Date.now().toString();
     (current as any).id = callId;
 
     setTimeout(() => {
@@ -408,7 +441,12 @@ if (data?.outcome && ["Boite_Vocale", "Pas_Joignable"].includes(data.outcome)) {
       return;
     }
     setStatus("💾 Sauvegarde en cours...");
-    await updateCallResult(callResult, callNotes, meetingNotes, meetingDatetime);
+    await updateCallResult(
+      callResult,
+      callNotes,
+      meetingNotes,
+      meetingDatetime
+    );
     clearPollingOutcome();
     setMeetingNotes("");
     setMeetingDatetime("");
@@ -416,11 +454,12 @@ if (data?.outcome && ["Boite_Vocale", "Pas_Joignable"].includes(data.outcome)) {
     setStatus("✅ Résultat sauvegardé");
     next();
     setTimeout(() => {
-      const callBtn = document.querySelector("button:has(svg.lucide-phone)") as HTMLButtonElement;
+      const callBtn = document.querySelector(
+        "button:has(svg.lucide-phone)"
+      ) as HTMLButtonElement;
       if (callBtn) callBtn.click();
     }, 1000);
   };
-
 
   const logout = () => {
     if (callState !== CALL_STATES.IDLE) {
@@ -428,22 +467,26 @@ if (data?.outcome && ["Boite_Vocale", "Pas_Joignable"].includes(data.outcome)) {
     }
     clearPollingOutcome();
     localStorage.removeItem("texion_agent");
-    setTimeout(() => { navigate("/", { replace: true }); }, 100);
+    setTimeout(() => {
+      navigate("/", { replace: true });
+    }, 100);
     destroyTwilioDevice();
   };
 
   // === UI RENDER ===
-  if (loading)
-    return <p className="p-10 text-center">{status}</p>;
+  if (loading) return <p className="p-10 text-center">{status}</p>;
   if (records.length === 0)
     return <p className="p-10 text-center">Aucun contact à appeler 👍</p>;
 
   // Debug logging only in development
   if (import.meta.env.DEV) {
-    console.log("Form render check:", { 
-      showForm, 
-      callState, 
-      shouldRender: showForm && (callState === CALL_STATES.WAITING_OUTCOME || callState === CALL_STATES.COMPLETED) 
+    console.log("Form render check:", {
+      showForm,
+      callState,
+      shouldRender:
+        showForm &&
+        (callState === CALL_STATES.WAITING_OUTCOME ||
+          callState === CALL_STATES.COMPLETED),
     });
   }
 
@@ -451,15 +494,25 @@ if (data?.outcome && ["Boite_Vocale", "Pas_Joignable"].includes(data.outcome)) {
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#f8fafc] via-[#fff] to-[#f3f4f6]">
       <div className="rounded-2xl shadow-2xl bg-white/95 px-8 py-12 w-full max-w-3xl flex flex-col items-center">
         <header className="flex flex-col items-center w-full mb-8">
-          <img src={Logo} alt="texion" className="w-full h-[100px] mb-3" style={{ objectFit: "contain" }} />
-          <h1 className="text-2xl font-bold text-slate-900 mb-1">POWER DIALER TEXION</h1>
+          <img
+            src={Logo}
+            alt="texion"
+            className="w-full h-[100px] mb-3"
+            style={{ objectFit: "contain" }}
+          />
+          <h1 className="text-2xl font-bold text-slate-900 mb-1">
+            POWER DIALER TEXION
+          </h1>
           <span className="text-xs font-medium text-slate-500">
-            {idx + 1}/{records.length} — Agent : {agent.split(" ")[0].toUpperCase()}
+            {idx + 1}/{records.length} — Agent :{" "}
+            {agent.split(" ")[0].toUpperCase()}
           </span>
         </header>
         <div className="flex items-center gap-2 text-sm">
           <span className="inline-block w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
-          <span className="font-medium text-green-700">Live depuis Airtable</span>
+          <span className="font-medium text-green-700">
+            Live depuis Airtable
+          </span>
         </div>
         <div className="flex items-center gap-2 text-sm">
           <span className="font-medium">Numéro sortant :</span>
@@ -480,19 +533,46 @@ if (data?.outcome && ["Boite_Vocale", "Pas_Joignable"].includes(data.outcome)) {
             <h3 className="mb-2 font-semibold text-zinc-800">Infos Prospect</h3>
             <Field label="Nom" value={get(current, "Full_Name")} />
             <Field label="Poste" value={get(current, "Job_Title")} />
-            <Field label="Entreprise" value={get(current, "Nom_de_la_compagnie")} />
-            <Field label="Profil LinkedIn" value={get(current, "LinkedIn_URL")} />
-            <Field label="Téléphone mobile" value={get(current, "Mobile_Phone")} />
-            <Field label="Téléphone direct" value={get(current, "Direct_Phone")} />
-            <Field label="Téléphone entreprise" value={get(current, "Company_Phone")} /> 
+            <Field
+              label="Entreprise"
+              value={get(current, "Nom_de_la_compagnie")}
+            />
+            <Field
+              label="Profil LinkedIn"
+              value={get(current, "LinkedIn_URL")}
+            />
+            <Field
+              label="Téléphone mobile"
+              value={get(current, "Mobile_Phone")}
+            />
+            <Field
+              label="Téléphone direct"
+              value={get(current, "Direct_Phone")}
+            />
+            <Field
+              label="Téléphone entreprise"
+              value={get(current, "Company_Phone")}
+            />
           </div>
           <div>
             <h3 className="mb-2 font-semibold text-zinc-800">Infos Activité</h3>
-            <Field label="Nom de l'activité" value={get(current, "Nom_de_l_Activite")} />
-            <Field label="Type d'activité" value={get(current, "Activite_HC")} />
-            <Field label="Nom du responsable" value={get(current, "Nom_du_responsable")} />
+            <Field
+              label="Nom de l'activité"
+              value={get(current, "Nom_de_l_Activite")}
+            />
+            <Field
+              label="Type d'activité"
+              value={get(current, "Activite_HC")}
+            />
+            <Field
+              label="Nom du responsable"
+              value={get(current, "Nom_du_responsable")}
+            />
             <Field label="Priorité" value={get(current, "Priorite")} />
-            <Field label="Statut" value={get(current, "Statut_de_l_Activite", "À Faire")} />
+            <Field
+              label="Statut"
+              value={get(current, "Statut_de_l_Activite", "À Faire")}
+            />
           </div>
         </div>
         <div
@@ -565,7 +645,7 @@ if (data?.outcome && ["Boite_Vocale", "Pas_Joignable"].includes(data.outcome)) {
             script={get(current, "Message_content")}
             onCallResultChange={setCallResult}
             onCallNotesChange={setCallNotes}
-            onMeetingNotesChange={setMeetingNotes} 
+            onMeetingNotesChange={setMeetingNotes}
             onMeetingDatetimeChange={setMeetingDatetime}
             onSubmit={saveAndNext}
           />
