@@ -160,7 +160,7 @@ export default function PowerDialer() {
 
     let attempts = 0;
     const maxAttempts = 30; // ~2 minutes
-    const delay = 4000; // 4 seconds per attempt
+    const delay = 4000; // 4 seconds per attempt  
 
     const poll = async () => {
       if (attempts++ >= maxAttempts) {
@@ -216,6 +216,8 @@ export default function PowerDialer() {
         setTimeout(poll, delay);
       }
     };
+
+    setTimeout(poll, delay);
   };
 
   // ------------------------------------------------------------------
