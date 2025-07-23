@@ -93,12 +93,7 @@ export default function PowerDialer() {
     forceStatutFait = false // new parameter for auto-saves
   ) {
     const payload = {
-      outcome:
-        result === "Boite_Vocale"
-          ? "Répondeur"
-          : result === "Pas_Joignable"
-          ? "Pas_Joignable"
-          : result,
+      outcome: result,
       number:
         get(current, "Mobile_Phone") ||
         get(current, "Direct_Phone") ||
