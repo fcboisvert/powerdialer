@@ -148,6 +148,7 @@ export default function PowerDialer() {
   const clearPollingOutcome = () => {
     // Nothing to cancel yet — placeholder for future polling cancel logic
   };
+
   const startPollingOutcome = (callId: string) => {
     console.log(`[PowerDialer] Starting to poll for callId: "${callId}"`);
     console.log(`[PowerDialer] callId length: ${callId.length}`);
