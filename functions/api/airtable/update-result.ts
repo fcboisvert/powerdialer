@@ -70,7 +70,7 @@ export const onRequest: PagesFunction<Env> = async ({ request, env }) => {
 
   const airtablePayload = {
     fields: {
-      "Resultat (Appel)": result,
+      "Resultat de l'Activite": result,
       "Notes Rencontres": meetingNotes ?? "",
       "Notes (Appel)": notes ?? "",
       "Date et Heure Rencontre": meetingDatetime ?? "",
