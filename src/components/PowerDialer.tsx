@@ -94,6 +94,7 @@ export default function PowerDialer() {
     forceStatutFait = false // new parameter for auto-saves
   ) {
     const payload = {
+      recordId: get(current, "Record_ID"),
       outcome: result,
       number:
         get(current, "Mobile_Phone") ||
@@ -125,7 +126,7 @@ export default function PowerDialer() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            recordId: current.id,
+            recordId: get(current, "Record_ID"),
             activityName: get(current, "Nom_de_l_Activite"),
             result,
             notes,
@@ -157,7 +158,7 @@ export default function PowerDialer() {
     console.log(`[PowerDialer] Full URL: ${OUTCOME_POLL_URL}?callId=${callId}`);
 
     let attempts = 0;
-    const maxAttempts = 30; // ~2 minutes
+    const maxAttempts = 100; // ~7 minutes
     const delay = 4000; // 4 seconds per attempt  
 
     const poll = async () => {
