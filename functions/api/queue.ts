@@ -145,7 +145,7 @@ function mapRecord(r: AirtableRecord) {
   const f = (k: string) => (r.fields[k] ?? "").toString().trim();
 
   return {
-    id: r.id,
+    Record_ID: r.id,
     Full_Name: f("Full Name"),
     Job_Title: f("Job Title"),
     Nom_de_la_compagnie: f("Nom de la compagnie"),

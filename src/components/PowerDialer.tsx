@@ -81,6 +81,7 @@ export default function PowerDialer() {
   const [callNotes, setCallNotes] = useState("");
   const [meetingNotes, setMeetingNotes] = useState("");
   const [meetingDatetime, setMeetingDatetime] = useState("");
+  const [pollTimer, setPollTimer] = useState<NodeJS.Timeout>();
   const current = records[idx] ?? {};
   const get = (obj: any, key: string, fb = "—") =>
     Array.isArray(obj?.[key]) ? obj[key][0] ?? fb : obj?.[key] ?? fb;
@@ -146,6 +147,7 @@ export default function PowerDialer() {
   // Helper to start polling KV for outcome until we get it or timeout
   // ------------------------------------------------------------------
   const clearPollingOutcome = () => {
+    pollTimer?.close();
     // Nothing to cancel yet — placeholder for future polling cancel logic
   };
 
@@ -209,11 +211,13 @@ export default function PowerDialer() {
             );
         }, 300);
       } else {
-        setTimeout(poll, delay);
+        const timer = setTimeout(poll, delay);
+        setPollTimer(timer);
       }
     };
 
-    setTimeout(poll, delay);
+    const timer = setTimeout(poll, delay);
+    setPollTimer(timer);
   };
 
   // ------------------------------------------------------------------
@@ -313,6 +317,7 @@ export default function PowerDialer() {
         to: to, // lowercase
         from: callerId, // lowercase
         parameters: {
+          recordId: get(current, "Record_ID"),
           // lowercase here too if function expects it, but it's Parameters in API so fine
           callId,
           leadName: get(current, "Full_Name"),

@@ -8,6 +8,7 @@ interface Env {
 const validOutcomes = ["Boite_Vocale", "Pas_Joignable"] as const;
 
 interface CallOutcomePayload {
+  recordId: string;
   outcome: "Boite_Vocale" | "Pas_Joignable";
   number: string;
   activity: string;
@@ -51,12 +52,12 @@ export const onRequest: PagesFunction<Env> = async (ctx) => {
     );
   }
 
-  const { outcome, callId, agent, activityName } = payload;
+  const { outcome, callId, agent, recordId, activityName } = payload;
 
-  if (!outcome || !callId || !agent) {
+  if (!outcome || !callId || !agent || !recordId) {
     return new Response(
       JSON.stringify({
-        error: "Missing required fields: outcome, callId, agent",
+        error: "Missing required fields: outcome, callId, agent, recordId",
       }),
       {
         status: 400,
@@ -104,6 +105,7 @@ export const onRequest: PagesFunction<Env> = async (ctx) => {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
+        recordId,
         activityName: activityName,
         result: outcome === "Boite_Vocale" ? "Répondeur" : outcome,
         notes: "",
