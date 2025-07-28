@@ -5,17 +5,18 @@
     "moduleResolution": "node",
     "target": "ES2020",
     "module": "ESNext",
-
     /* Library + JSX */
-    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "lib": [
+      "ES2020",
+      "DOM",
+      "DOM.Iterable"
+    ],
     "jsx": "react-jsx",
-
     /* Strict – but relaxed on unused for first deploy */
     "strict": true,
     "skipLibCheck": true,
     "noUnusedLocals": false,
     "noUnusedParameters": false,
-
     /* Nice-to-haves */
     "useDefineForClassFields": true,
     "allowImportingTsExtensions": true,
@@ -23,15 +24,21 @@
     "isolatedModules": true,
     "noEmit": true,
     "noFallthroughCasesInSwitch": true,
-
     /* Path alias (@/…) */
     "baseUrl": ".",
-    "paths": { "@/*": ["./src/*"] },
-
+    "paths": {
+      "@/*": [
+        "./src/*"
+      ]
+    },
     /* Global types */
-    "types": ["vite/client", "node", "@cloudflare/workers-types"]
+    "types": [
+      "vite/client",
+      "node"
+    ]
   },
-
-  /* Include both frontend and Cloudflare function code */
-  "include": ["src", "functions"]
+  /* Only include frontend code */
+  "include": [
+    "src"
+  ]
 }

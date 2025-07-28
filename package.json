@@ -5,11 +5,12 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "vite build && npm run build:functions",
+    "build:functions": "cd functions && tsc",
     "lint": "eslint .",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
-    "deploy": "npm run build && npx wrangler pages deploy dist --project-name=powerdialer"
+    "deploy": "npm run build && npx wrangler pages deploy dist --functions=functions-build"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.14",
@@ -50,7 +51,7 @@
     "vaul": "^1.1.2"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20250715.0",
+    "@cloudflare/workers-types": "^4.20250726.0",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^22.16.2",
     "@types/react": "^19.1.8",
