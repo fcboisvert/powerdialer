@@ -27,7 +27,7 @@ export async function initTwilioDevice(agent: string): Promise<void> {
 
     device.on('ready', () => console.log('🔔 Twilio Device ready'));
     device.on('error', (error) => console.error('❌ Twilio error:', error));
-    device.on('incoming', (conn: Call) => conn.accept()); // Reject unexpected inbound
+    device.on('incoming', (conn: Call) => conn.accept());
 
     await device.register(); // Ensures device is fully registered for status
   } catch (err: any) {
