@@ -87,7 +87,7 @@ export const onRequest: PagesFunction<Env> = async ({ request, env }) => {
       "Notes Rencontres": meetingNotes ?? "", // CONFIRMED
       // "Notes (Appel)": notes ?? "", // BAD
       // "Date Realisee": new Date().toISOString(), // UNNECESSARY
-      "Date et Heure Rencontre": meetingDatetime ?? undefined, // CONFIRMED
+      "Date et Heure Rencontre": meetingDatetime || undefined, // CONFIRMED
       "Statut de l'Activite": "Fait", // CONFIRMED
       // "Updated By": agent, // BAD
       // "Updated At": new Date().toISOString(), // BAD

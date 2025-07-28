@@ -1,0 +1,32 @@
+POST https://texion.app/api/airtable/update-result
+Content-Type: application/json
+ 
+{
+    "activityName": "whatever",
+    "result": "recVhLI35Yc5CeZ6k",
+    "agent": "agent",
+    "recordId": "rec4bhkHjmLyacNyk"
+}
+
+###
+
+GET https://api.airtable.com/v0/apprTpOIFRuckIZJz/Interaction_Activities
+Authorization: Bearer patjsWVtHdSSly6PA.45f4046b054f9060d519332d047de53e7b56819c43f4bbe1c8b57fac4c2740c6
+
+###
+
+PATCH https://api.airtable.com/v0/apprTpOIFRuckIZJz/Interaction_Activities/rec4bhkHjmLyacNyk
+authorization: Bearer patjsWVtHdSSly6PA.45f4046b054f9060d519332d047de53e7b56819c43f4bbe1c8b57fac4c2740c6
+Content-Type: application/json
+
+{"fields": {"Statut de l'Activite": "Fait"}}
+
+###
+###Date et Heure Rencontre
+###Resultat de l'Activite
+###Statut de l'Activite
+###Notes Rencontres
+### 
+
+apprTpOIFRuckIZJz
+Interaction_Activities
