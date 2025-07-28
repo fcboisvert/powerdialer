@@ -31,24 +31,24 @@ interface ProcessingStep {
 }
 
 const SUPPORTED_FORMATS = [
-  'audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/m4a', 
+  'audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/m4a',
   'audio/aac', 'audio/ogg', 'audio/webm', 'audio/flac'
 ];
 
 const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
-const CHUNK_SIZE = 5 * 1024 * 1024; // 5MB chunks
+const CHUNK_SIZE = 20 * 1024 * 1024; // 20MB chunks for Whisper API
 
-// Utility function to chunk files
+// Utility function to chunk files in browser
 const chunkFile = (file: File, chunkSize: number = CHUNK_SIZE): Blob[] => {
   const chunks: Blob[] = [];
   let start = 0;
-  
+
   while (start < file.size) {
     const end = Math.min(start + chunkSize, file.size);
-    chunks.push(file.slice(start, end));
+    chunks.push(file.slice(start, end, file.type));
     start = end;
   }
-  
+
   return chunks;
 };
 
@@ -77,7 +77,7 @@ export default function MeetingTranscriber() {
 
   // Update processing step status
   const updateStep = (stepId: string, status: ProcessingStep['status'], progress?: number) => {
-    setProcessingSteps(prev => prev.map(step => 
+    setProcessingSteps(prev => prev.map(step =>
       step.id === stepId ? { ...step, status, progress } : step
     ));
   };
@@ -90,7 +90,7 @@ export default function MeetingTranscriber() {
     }
 
     // Check file format
-    const isValidFormat = SUPPORTED_FORMATS.some(format => 
+    const isValidFormat = SUPPORTED_FORMATS.some(format =>
       file.type === format || file.name.toLowerCase().endsWith(format.split('/')[1])
     );
 
@@ -119,8 +119,8 @@ export default function MeetingTranscriber() {
     setDragActive(false);
 
     const droppedFiles = Array.from(e.dataTransfer.files);
-    const audioFile = droppedFiles.find(file => 
-      SUPPORTED_FORMATS.some(format => 
+    const audioFile = droppedFiles.find(file =>
+      SUPPORTED_FORMATS.some(format =>
         file.type === format || file.name.toLowerCase().endsWith(format.split('/')[1])
       )
     );
@@ -187,63 +187,6 @@ export default function MeetingTranscriber() {
     return `~${hours}h ${mins}min`;
   };
 
-  // Upload file with chunking
-  const uploadChunkedFile = async (file: File, endpoint: string): Promise<Response> => {
-    const chunks = chunkFile(file);
-    const totalChunks = chunks.length;
-    const fileId = Date.now().toString();
-
-    // If file is small enough, upload directly without chunking
-    if (chunks.length === 1) {
-      const formData = new FormData();
-      formData.append('audio', file);
-      return fetch(endpoint, {
-        method: 'POST',
-        body: formData,
-      });
-    }
-
-    // Upload chunks
-    for (let i = 0; i < chunks.length; i++) {
-      const formData = new FormData();
-      formData.append('chunk', chunks[i]);
-      formData.append('chunkIndex', i.toString());
-      formData.append('totalChunks', totalChunks.toString());
-      formData.append('fileName', file.name);
-      formData.append('fileId', fileId);
-      formData.append('fileType', file.type);
-      
-      // If it's the last chunk, indicate completion
-      if (i === chunks.length - 1) {
-        formData.append('isLastChunk', 'true');
-      }
-
-      const response = await fetch('/api/upload-chunk', {
-        method: 'POST',
-        body: formData,
-      });
-
-      if (!response.ok) {
-        throw new Error(`Échec du téléchargement du chunk ${i + 1}/${totalChunks}`);
-      }
-
-      // Update upload progress
-      const progress = ((i + 1) / totalChunks) * 100;
-      setUploadProgress(progress);
-      setProgress(`📤 Téléchargement: ${Math.round(progress)}% (${i + 1}/${totalChunks} chunks)`);
-    }
-
-    // Return the final response from the last chunk
-    return new Response(JSON.stringify({ 
-      success: true, 
-      fileId,
-      fileName: file.name 
-    }), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' }
-    });
-  };
-
   // Process the audio file
   const processAudio = async () => {
     if (!file) return;
@@ -254,53 +197,20 @@ export default function MeetingTranscriber() {
     initializeSteps();
 
     try {
-      // Step 1: Upload and transcribe
+      // Step 1: Handle transcription
       updateStep('upload', 'processing');
-      setProgress('📤 Téléchargement en cours...');
-      
-      let transcriptionData;
-      
-      // Check if file needs chunking
-      if (file.size > CHUNK_SIZE) {
-        const chunks = chunkFile(file);
-        const chunkCount = chunks.length;
-        setProgress(`📤 Fichier volumineux détecté - Division en ${chunkCount} parties...`);
-        
-        // Upload chunked file
-        const uploadResponse = await uploadChunkedFile(file, '/api/transcribe');
-        
-        if (!uploadResponse.ok) {
-          const errorData = await uploadResponse.json().catch(() => ({}));
-          throw new Error(errorData.error || `Erreur lors du téléchargement (${uploadResponse.status})`);
-        }
-        
-        const uploadData = await uploadResponse.json();
-        
-        // Now transcribe the assembled file
-        setProgress('🎙️ Transcription en cours...');
-        const transcribeResponse = await fetch('/api/transcribe-assembled', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            fileId: uploadData.fileId,
-            fileName: uploadData.fileName,
-          }),
-        });
+      updateStep('transcribe', 'processing');
 
-        if (!transcribeResponse.ok) {
-          const errorData = await transcribeResponse.json().catch(() => ({}));
-          throw new Error(errorData.error || `Erreur lors de la transcription (${transcribeResponse.status})`);
-        }
+      let fullTranscription = '';
 
-        transcriptionData = await transcribeResponse.json();
-      } else {
-        // Small file - upload directly
+      if (file.size <= CHUNK_SIZE) {
+        // Small file - direct upload
+        setProgress('📤 Téléchargement et transcription en cours...');
+
         const formData = new FormData();
         formData.append('audio', file);
 
-        const transcribeResponse = await fetch('/api/transcribe', {
+        const transcribeResponse = await fetch('/transcribe', {
           method: 'POST',
           body: formData,
         });
@@ -310,28 +220,72 @@ export default function MeetingTranscriber() {
           throw new Error(errorData.error || `Erreur lors de la transcription (${transcribeResponse.status})`);
         }
 
-        transcriptionData = await transcribeResponse.json();
-      }
-      
-      if (!transcriptionData.success) {
-        throw new Error(transcriptionData.error || 'Erreur lors de la transcription');
+        const data = await transcribeResponse.json();
+
+        if (!data.success) {
+          throw new Error(data.error || 'Erreur lors de la transcription');
+        }
+
+        fullTranscription = data.transcription;
+
+      } else {
+        // Large file - split and transcribe chunks
+        const chunks = chunkFile(file, CHUNK_SIZE);
+        setProgress(`📦 Fichier volumineux détecté - Division en ${chunks.length} parties...`);
+
+        const transcriptions: string[] = [];
+
+        for (let i = 0; i < chunks.length; i++) {
+          setProgress(`🎙️ Transcription partie ${i + 1}/${chunks.length}...`);
+          setUploadProgress((i / chunks.length) * 100);
+
+          const formData = new FormData();
+          // Create a new File object from the chunk
+          const chunkFile = new File([chunks[i]], `${file.name}.part${i}`, { type: file.type });
+          formData.append('audio', chunkFile);
+
+          const response = await fetch('/transcribe', {
+            method: 'POST',
+            body: formData,
+          });
+
+          if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.error || `Échec transcription partie ${i + 1}`);
+          }
+
+          const data = await response.json();
+
+          if (!data.success) {
+            throw new Error(data.error || `Erreur transcription partie ${i + 1}`);
+          }
+
+          transcriptions.push(data.transcription);
+
+          // Update progress
+          setUploadProgress(((i + 1) / chunks.length) * 100);
+        }
+
+        // Combine all transcriptions
+        fullTranscription = transcriptions.join('\n\n');
       }
 
       updateStep('upload', 'completed');
       updateStep('transcribe', 'completed');
       setProgress('✅ Transcription terminée avec succès');
+      setUploadProgress(0);
 
       // Step 2: Analyze with GPT-4
       updateStep('analyze', 'processing');
       setProgress('🧠 Analyse intelligente en cours...');
-      
-      const analyzeResponse = await fetch('/api/analyze', {
+
+      const analyzeResponse = await fetch('/analyze', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          transcription: transcriptionData.transcription,
+          transcription: fullTranscription,
         }),
       });
 
@@ -352,8 +306,8 @@ export default function MeetingTranscriber() {
       // Step 3: Generate Word document
       updateStep('generate', 'processing');
       setProgress('📄 Génération du document Word...');
-      
-      const docResponse = await fetch('/api/generate-doc', {
+
+      const docResponse = await fetch('/generate-doc', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -385,14 +339,14 @@ export default function MeetingTranscriber() {
 
     } catch (error: any) {
       console.error('Processing error:', error);
-      
+
       // Update failed step
       processingSteps.forEach(step => {
         if (step.status === 'processing') {
           updateStep(step.id, 'error');
         }
       });
-      
+
       setResult({
         success: false,
         error: error.message || 'Une erreur est survenue lors du traitement',
@@ -421,7 +375,7 @@ export default function MeetingTranscriber() {
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-      
+
       // Clean up blob URL after download
       setTimeout(() => {
         URL.revokeObjectURL(downloadUrl);
@@ -478,11 +432,10 @@ export default function MeetingTranscriber() {
           <Card className="w-full mb-6">
             <CardContent className="p-8">
               <div
-                className={`border-2 border-dashed rounded-xl p-8 text-center transition-all ${
-                  dragActive
-                    ? 'border-[#E24218] bg-orange-50'
-                    : 'border-slate-300 hover:border-slate-400'
-                }`}
+                className={`border-2 border-dashed rounded-xl p-8 text-center transition-all ${dragActive
+                  ? 'border-[#E24218] bg-orange-50'
+                  : 'border-slate-300 hover:border-slate-400'
+                  }`}
                 onDragEnter={handleDrag}
                 onDragLeave={handleDrag}
                 onDragOver={handleDrag}
@@ -581,7 +534,7 @@ export default function MeetingTranscriber() {
                     <p className="text-slate-500">{progress}</p>
                   </div>
                 </div>
-                
+
                 {/* Upload Progress Bar */}
                 {uploadProgress > 0 && uploadProgress < 100 && (
                   <div className="mb-4">
@@ -594,27 +547,25 @@ export default function MeetingTranscriber() {
                     <p className="text-xs text-gray-600 mt-1">{Math.round(uploadProgress)}% téléchargé</p>
                   </div>
                 )}
-                
+
                 <div className="space-y-3">
                   {processingSteps.map((step, index) => (
                     <div key={step.id} className="flex items-center gap-3">
-                      <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
-                        step.status === 'completed' ? 'bg-green-100 text-green-700' :
+                      <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${step.status === 'completed' ? 'bg-green-100 text-green-700' :
                         step.status === 'processing' ? 'bg-orange-100 text-orange-700' :
-                        step.status === 'error' ? 'bg-red-100 text-red-700' :
-                        'bg-slate-100 text-slate-500'
-                      }`}>
+                          step.status === 'error' ? 'bg-red-100 text-red-700' :
+                            'bg-slate-100 text-slate-500'
+                        }`}>
                         {step.status === 'completed' ? '✓' :
-                         step.status === 'processing' ? <Loader2 className="w-4 h-4 animate-spin" /> :
-                         step.status === 'error' ? '✗' :
-                         index + 1}
+                          step.status === 'processing' ? <Loader2 className="w-4 h-4 animate-spin" /> :
+                            step.status === 'error' ? '✗' :
+                              index + 1}
                       </div>
-                      <span className={`flex-1 ${
-                        step.status === 'completed' ? 'text-green-700' :
+                      <span className={`flex-1 ${step.status === 'completed' ? 'text-green-700' :
                         step.status === 'processing' ? 'text-orange-700' :
-                        step.status === 'error' ? 'text-red-700' :
-                        'text-slate-500'
-                      }`}>
+                          step.status === 'error' ? 'text-red-700' :
+                            'text-slate-500'
+                        }`}>
                         {step.label}
                       </span>
                     </div>
@@ -630,9 +581,8 @@ export default function MeetingTranscriber() {
           <Card className="w-full">
             <CardContent className="p-6">
               <div className="flex items-start gap-4">
-                <div className={`p-3 rounded-full ${
-                  result.success ? 'bg-green-100' : 'bg-red-100'
-                }`}>
+                <div className={`p-3 rounded-full ${result.success ? 'bg-green-100' : 'bg-red-100'
+                  }`}>
                   {result.success ? (
                     <CheckCircle className="w-6 h-6 text-green-600" />
                   ) : (
@@ -640,15 +590,14 @@ export default function MeetingTranscriber() {
                   )}
                 </div>
                 <div className="flex-1">
-                  <h3 className={`font-semibold mb-2 ${
-                    result.success ? 'text-green-900' : 'text-red-900'
-                  }`}>
+                  <h3 className={`font-semibold mb-2 ${result.success ? 'text-green-900' : 'text-red-900'
+                    }`}>
                     {result.success ? 'Transcription réussie !' : 'Erreur de transcription'}
                   </h3>
                   {result.success ? (
                     <div className="space-y-4">
                       <p className="text-slate-600">
-                        Votre fichier audio a été transcrit et analysé avec succès. 
+                        Votre fichier audio a été transcrit et analysé avec succès.
                         Le document contient un résumé intelligent, les actions à retenir et la transcription complète.
                       </p>
                       <div className="flex gap-2">
