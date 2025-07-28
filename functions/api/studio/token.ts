@@ -1,83 +1,121 @@
 /// <reference types="@cloudflare/workers-types" />
-import * as twilio from '@twilio/voice-sdk';
 
 interface Env {
     TWILIO_ACCOUNT_SID: string;
     TWILIO_API_KEY: string;
     TWILIO_API_SECRET: string;
-    FLOW_SID: string;
     TWILIO_TWIML_APP_SID: string;
-
-}
-
-interface Payload {
-    agent: string;
-}
-// OPTIONS (CORS preflight)
-export const onRequestOptions: PagesFunction<Env> = async () => {
-    return new Response(null, { status: 204, headers: corsHeaders });
-};
-export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
-    let payload: Payload;
-
-    try {
-        payload = (await request.json()) as typeof payload;
-    } catch {
-        return json({ error: 'Body must be valid JSON' }, 400);
-    }
-
-    const { agent } = payload;
-    if (!agent) {
-        return json({ error: 'missing agent' }, 400);
-    }
-
-    const accessToken = new twilio.jwt.AccessToken(
-        env.TWILIO_ACCOUNT_SID,
-        env.TWILIO_API_KEY,
-        env.TWILIO_API_SECRET,
-        { identity: agent }
-    )
-    const grant = new twilio.jwt.AccessToken.VoiceGrant({
-        incomingAllow: true,
-        outgoingApplicationSid: env.TWILIO_TWIML_APP_SID,
-    })
-    accessToken.addGrant(grant)
-
-    return json({ token: accessToken.toJwt() })
 }
 
 const corsHeaders = {
-    "Access-Control-Allow-Origin": "*",  // Wildcard for dev; scope to texion.app later
+    "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Methods": "POST, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type",
-    "Access-Control-Max-Age": "86400",
 };
 
-/* ---------- Small helper ---------- */
-const json = (data: unknown, status = 200): Response =>
-    new Response(JSON.stringify(data), {
-        status,
-        headers: { 'Content-Type': 'application/json', ...corsHeaders },
-    });
+// Base64 URL encoding helper
+function base64url(str: string): string {
+    return btoa(str)
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_')
+        .replace(/=/g, '');
+}
 
+export const onRequestOptions: PagesFunction<Env> = async () => {
+    return new Response(null, { status: 204, headers: corsHeaders });
+};
 
-// identity = nameGenerator();
+export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
+    try {
+        // Parse request body
+        let body: any;
+        try {
+            body = await request.json();
+        } catch (e) {
+            return new Response(JSON.stringify({ error: 'Invalid JSON in request body' }), {
+                status: 400,
+                headers: { 'Content-Type': 'application/json', ...corsHeaders }
+            });
+        }
 
-// const accessToken = new AccessToken(
-//     config.accountSid,
-//     config.apiKey,
-//     config.apiSecret
-// );
-// accessToken.identity = identity;
-// const grant = new VoiceGrant({
-//     outgoingApplicationSid: config.twimlAppSid,
-//     incomingAllow: true,
-// });
-// accessToken.addGrant(grant);
+        // Extract agent from body
+        const agent = body?.agent;
 
-// // Include identity and token in a JSON response
-// return {
-//     identity: identity,
-//     token: accessToken.toJwt(),
-// };
-// };
+        if (!agent) {
+            return new Response(JSON.stringify({ error: 'missing agent', received: body }), {
+                status: 400,
+                headers: { 'Content-Type': 'application/json', ...corsHeaders }
+            });
+        }
+
+        // Log for debugging
+        console.log('Generating token for agent:', agent);
+
+        // For Cloudflare Workers, we need to use crypto.subtle for HMAC
+        const now = Math.floor(Date.now() / 1000);
+        const expires = now + 3600;
+
+        const header = {
+            typ: 'JWT',
+            alg: 'HS256',
+            cty: 'twilio-fpa;v=1'
+        };
+
+        const grants = {
+            identity: agent,
+            voice: {
+                incoming: { allow: true },
+                outgoing: {
+                    application_sid: env.TWILIO_TWIML_APP_SID
+                }
+            }
+        };
+
+        const payload = {
+            jti: `${env.TWILIO_API_KEY}-${now}`,
+            iss: env.TWILIO_API_KEY,
+            sub: env.TWILIO_ACCOUNT_SID,
+            nbf: now,
+            exp: expires,
+            grants: grants
+        };
+
+        const headerStr = base64url(JSON.stringify(header));
+        const payloadStr = base64url(JSON.stringify(payload));
+        const toSign = `${headerStr}.${payloadStr}`;
+
+        // Create HMAC-SHA256 signature using Web Crypto API
+        const encoder = new TextEncoder();
+        const key = await crypto.subtle.importKey(
+            'raw',
+            encoder.encode(env.TWILIO_API_SECRET),
+            { name: 'HMAC', hash: 'SHA-256' },
+            false,
+            ['sign']
+        );
+
+        const signature = await crypto.subtle.sign(
+            'HMAC',
+            key,
+            encoder.encode(toSign)
+        );
+
+        const signatureStr = base64url(String.fromCharCode(...new Uint8Array(signature)));
+        const token = `${toSign}.${signatureStr}`;
+
+        return new Response(JSON.stringify({ token }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json', ...corsHeaders }
+        });
+    } catch (error: any) {
+        console.error('Token generation error:', error);
+        return new Response(JSON.stringify({
+            error: 'Token generation failed',
+            details: error.message,
+            stack: error.stack
+        }), {
+            status: 500,
+            headers: { 'Content-Type': 'application/json', ...corsHeaders }
+        });
+    }
+};
