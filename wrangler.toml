@@ -1,7 +1,8 @@
 name = "powerdialer"
-compatibility_date = "2025-07-15"
+compatibility_date = "2025-01-15"
 pages_build_output_dir = "./dist"
 
+# Your existing KV namespace
 [[kv_namespaces]]
 binding = "OUTCOMES_KV"
 id = "7bbc9e3c31d04d87893e4ceb06f75d43"

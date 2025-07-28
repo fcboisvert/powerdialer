@@ -6,6 +6,7 @@ import {
   BarChart3,
   Settings,
   LogOut,
+  Mic, // Add this import
 } from "lucide-react";
 
 import Logo from "/texion-logo.svg";
@@ -15,6 +16,12 @@ const apps = [
     name: "Power Dialer",
     icon: PhoneCall,
     route: "/powerdialer",
+  },
+   // Add this new app
+  {
+    name: "Transcripteur de Réunions",
+    icon: Mic,
+    route: "/meeting-transcriber",
   },
   {
     name: "Rapports",

@@ -1,12 +1,15 @@
-// /mnt/c/Users/Frédéric-CharlesBois/projects/Powerdialer/functions/api/analyze.ts
 import OpenAI from 'openai';
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-  timeout: 120000,
-});
+export interface Env {
+  OPENAI_API_KEY: string;
+}
 
-const analyzeTranscript = async (transcription: string): Promise<string> => {
+const analyzeTranscript = async (transcription: string, apiKey: string): Promise<string> => {
+  const openai = new OpenAI({
+    apiKey: apiKey,
+    timeout: 120000,
+  });
+
   const prompt = `
 Analyze this conversation transcript and produce the following:
 
@@ -34,40 +37,71 @@ ${transcription}`;
   return completion.choices[0].message.content || '';
 };
 
-export async function onRequestPost(context: any) {
-  try {
-    const request = context.request;
-    const { transcription } = await request.json();
-
-    if (!transcription) {
-      return new Response(JSON.stringify({ 
-        success: false,
-        error: 'No transcription provided' 
-      }), {
-        status: 400,
-        headers: { 'Content-Type': 'application/json' },
+export default {
+  async fetch(request: Request, env: Env): Promise<Response> {
+    // Handle CORS
+    if (request.method === 'OPTIONS') {
+      return new Response(null, {
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Methods': 'POST, OPTIONS',
+          'Access-Control-Allow-Headers': 'Content-Type',
+        },
       });
     }
 
-    console.log('🔄 Analyzing transcript with GPT-4...');
-    const analysis = await analyzeTranscript(transcription);
+    if (request.method !== 'POST') {
+      return new Response(JSON.stringify({ error: 'Method not allowed' }), {
+        status: 405,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+        },
+      });
+    }
 
-    return new Response(JSON.stringify({
-      success: true,
-      analysis,
-    }), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' },
-    });
+    try {
+      const body = await request.json();
+      const { transcription } = body;
 
-  } catch (error: any) {
-    console.error('❌ Analysis API error:', error);
-    return new Response(JSON.stringify({
-      success: false,
-      error: error.message || 'Analysis failed',
-    }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json' },
-    });
-  }
-}
+      if (!transcription) {
+        return new Response(JSON.stringify({ 
+          success: false,
+          error: 'No transcription provided' 
+        }), {
+          status: 400,
+          headers: {
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*',
+          },
+        });
+      }
+
+      console.log('🔄 Analyzing transcript with GPT-4...');
+      const analysis = await analyzeTranscript(transcription, env.OPENAI_API_KEY);
+
+      return new Response(JSON.stringify({
+        success: true,
+        analysis,
+      }), {
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+        },
+      });
+
+    } catch (error: any) {
+      console.error('❌ Analysis API error:', error);
+      return new Response(JSON.stringify({
+        success: false,
+        error: error.message || 'Analysis failed',
+      }), {
+        status: 500,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+        },
+      });
+    }
+  },
+};

@@ -10,6 +10,8 @@ import {
   XCircle,
   Mic,
   ArrowLeft,
+  AlertCircle,
+  RefreshCw,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import Logo from '/texion-logo.svg';
@@ -21,6 +23,35 @@ interface TranscriptionResult {
   filename?: string;
 }
 
+interface ProcessingStep {
+  id: string;
+  label: string;
+  status: 'pending' | 'processing' | 'completed' | 'error';
+  progress?: number;
+}
+
+const SUPPORTED_FORMATS = [
+  'audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/m4a', 
+  'audio/aac', 'audio/ogg', 'audio/webm', 'audio/flac'
+];
+
+const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
+const CHUNK_SIZE = 5 * 1024 * 1024; // 5MB chunks
+
+// Utility function to chunk files
+const chunkFile = (file: File, chunkSize: number = CHUNK_SIZE): Blob[] => {
+  const chunks: Blob[] = [];
+  let start = 0;
+  
+  while (start < file.size) {
+    const end = Math.min(start + chunkSize, file.size);
+    chunks.push(file.slice(start, end));
+    start = end;
+  }
+  
+  return chunks;
+};
+
 export default function MeetingTranscriber() {
   const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -30,6 +61,45 @@ export default function MeetingTranscriber() {
   const [progress, setProgress] = useState('');
   const [result, setResult] = useState<TranscriptionResult | null>(null);
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
+  const [processingSteps, setProcessingSteps] = useState<ProcessingStep[]>([]);
+  const [retryCount, setRetryCount] = useState(0);
+  const [uploadProgress, setUploadProgress] = useState(0);
+
+  // Initialize processing steps
+  const initializeSteps = () => {
+    setProcessingSteps([
+      { id: 'upload', label: 'Téléchargement du fichier', status: 'pending' },
+      { id: 'transcribe', label: 'Transcription audio (Whisper)', status: 'pending' },
+      { id: 'analyze', label: 'Analyse intelligente (GPT-4)', status: 'pending' },
+      { id: 'generate', label: 'Génération du document Word', status: 'pending' },
+    ]);
+  };
+
+  // Update processing step status
+  const updateStep = (stepId: string, status: ProcessingStep['status'], progress?: number) => {
+    setProcessingSteps(prev => prev.map(step => 
+      step.id === stepId ? { ...step, status, progress } : step
+    ));
+  };
+
+  // Validate file
+  const validateFile = (file: File): string | null => {
+    // Check file size
+    if (file.size > MAX_FILE_SIZE) {
+      return `Fichier trop volumineux. Taille maximale: ${MAX_FILE_SIZE / 1024 / 1024}MB, votre fichier: ${Math.round(file.size / 1024 / 1024)}MB`;
+    }
+
+    // Check file format
+    const isValidFormat = SUPPORTED_FORMATS.some(format => 
+      file.type === format || file.name.toLowerCase().endsWith(format.split('/')[1])
+    );
+
+    if (!isValidFormat) {
+      return 'Format de fichier non supporté. Formats acceptés: MP3, WAV, M4A, AAC, OGG, WEBM, FLAC';
+    }
+
+    return null;
+  };
 
   // Handle drag events
   const handleDrag = useCallback((e: React.DragEvent) => {
@@ -50,13 +120,30 @@ export default function MeetingTranscriber() {
 
     const droppedFiles = Array.from(e.dataTransfer.files);
     const audioFile = droppedFiles.find(file => 
-      file.type.startsWith('audio/') || file.name.toLowerCase().endsWith('.mp3')
+      SUPPORTED_FORMATS.some(format => 
+        file.type === format || file.name.toLowerCase().endsWith(format.split('/')[1])
+      )
     );
 
     if (audioFile) {
+      const validationError = validateFile(audioFile);
+      if (validationError) {
+        setResult({
+          success: false,
+          error: validationError,
+        });
+        return;
+      }
+
       setFile(audioFile);
       setResult(null);
       setDownloadUrl(null);
+      setRetryCount(0);
+    } else {
+      setResult({
+        success: false,
+        error: 'Aucun fichier audio valide détecté dans les fichiers déposés.',
+      });
     }
   }, []);
 
@@ -64,9 +151,19 @@ export default function MeetingTranscriber() {
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
     if (selectedFile) {
+      const validationError = validateFile(selectedFile);
+      if (validationError) {
+        setResult({
+          success: false,
+          error: validationError,
+        });
+        return;
+      }
+
       setFile(selectedFile);
       setResult(null);
       setDownloadUrl(null);
+      setRetryCount(0);
     }
   };
 
@@ -79,34 +176,154 @@ export default function MeetingTranscriber() {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
 
+  // Get file duration estimate
+  const getEstimatedDuration = (fileSize: number): string => {
+    // Rough estimate: 1MB ≈ 1 minute of audio
+    const estimatedMinutes = Math.round(fileSize / (1024 * 1024));
+    if (estimatedMinutes < 1) return '< 1 min';
+    if (estimatedMinutes < 60) return `~${estimatedMinutes} min`;
+    const hours = Math.floor(estimatedMinutes / 60);
+    const mins = estimatedMinutes % 60;
+    return `~${hours}h ${mins}min`;
+  };
+
+  // Upload file with chunking
+  const uploadChunkedFile = async (file: File, endpoint: string): Promise<Response> => {
+    const chunks = chunkFile(file);
+    const totalChunks = chunks.length;
+    const fileId = Date.now().toString();
+
+    // If file is small enough, upload directly without chunking
+    if (chunks.length === 1) {
+      const formData = new FormData();
+      formData.append('audio', file);
+      return fetch(endpoint, {
+        method: 'POST',
+        body: formData,
+      });
+    }
+
+    // Upload chunks
+    for (let i = 0; i < chunks.length; i++) {
+      const formData = new FormData();
+      formData.append('chunk', chunks[i]);
+      formData.append('chunkIndex', i.toString());
+      formData.append('totalChunks', totalChunks.toString());
+      formData.append('fileName', file.name);
+      formData.append('fileId', fileId);
+      formData.append('fileType', file.type);
+      
+      // If it's the last chunk, indicate completion
+      if (i === chunks.length - 1) {
+        formData.append('isLastChunk', 'true');
+      }
+
+      const response = await fetch('/api/upload-chunk', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error(`Échec du téléchargement du chunk ${i + 1}/${totalChunks}`);
+      }
+
+      // Update upload progress
+      const progress = ((i + 1) / totalChunks) * 100;
+      setUploadProgress(progress);
+      setProgress(`📤 Téléchargement: ${Math.round(progress)}% (${i + 1}/${totalChunks} chunks)`);
+    }
+
+    // Return the final response from the last chunk
+    return new Response(JSON.stringify({ 
+      success: true, 
+      fileId,
+      fileName: file.name 
+    }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' }
+    });
+  };
+
   // Process the audio file
   const processAudio = async () => {
     if (!file) return;
 
     setProcessing(true);
-    setProgress('🔄 Préparation du fichier audio...');
+    setProgress('🔄 Initialisation du traitement...');
+    setUploadProgress(0);
+    initializeSteps();
 
     try {
-      // Create FormData for file upload
-      const formData = new FormData();
-      formData.append('audio', file);
-
       // Step 1: Upload and transcribe
-      setProgress('🎤 Transcription en cours avec Whisper...');
+      updateStep('upload', 'processing');
+      setProgress('📤 Téléchargement en cours...');
       
-      const transcribeResponse = await fetch('/api/transcribe', {
-        method: 'POST',
-        body: formData,
-      });
+      let transcriptionData;
+      
+      // Check if file needs chunking
+      if (file.size > CHUNK_SIZE) {
+        const chunks = chunkFile(file);
+        const chunkCount = chunks.length;
+        setProgress(`📤 Fichier volumineux détecté - Division en ${chunkCount} parties...`);
+        
+        // Upload chunked file
+        const uploadResponse = await uploadChunkedFile(file, '/api/transcribe');
+        
+        if (!uploadResponse.ok) {
+          const errorData = await uploadResponse.json().catch(() => ({}));
+          throw new Error(errorData.error || `Erreur lors du téléchargement (${uploadResponse.status})`);
+        }
+        
+        const uploadData = await uploadResponse.json();
+        
+        // Now transcribe the assembled file
+        setProgress('🎙️ Transcription en cours...');
+        const transcribeResponse = await fetch('/api/transcribe-assembled', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            fileId: uploadData.fileId,
+            fileName: uploadData.fileName,
+          }),
+        });
 
-      if (!transcribeResponse.ok) {
-        throw new Error('Erreur lors de la transcription');
+        if (!transcribeResponse.ok) {
+          const errorData = await transcribeResponse.json().catch(() => ({}));
+          throw new Error(errorData.error || `Erreur lors de la transcription (${transcribeResponse.status})`);
+        }
+
+        transcriptionData = await transcribeResponse.json();
+      } else {
+        // Small file - upload directly
+        const formData = new FormData();
+        formData.append('audio', file);
+
+        const transcribeResponse = await fetch('/api/transcribe', {
+          method: 'POST',
+          body: formData,
+        });
+
+        if (!transcribeResponse.ok) {
+          const errorData = await transcribeResponse.json().catch(() => ({}));
+          throw new Error(errorData.error || `Erreur lors de la transcription (${transcribeResponse.status})`);
+        }
+
+        transcriptionData = await transcribeResponse.json();
+      }
+      
+      if (!transcriptionData.success) {
+        throw new Error(transcriptionData.error || 'Erreur lors de la transcription');
       }
 
-      const transcriptionData = await transcribeResponse.json();
+      updateStep('upload', 'completed');
+      updateStep('transcribe', 'completed');
+      setProgress('✅ Transcription terminée avec succès');
 
       // Step 2: Analyze with GPT-4
-      setProgress('🧠 Analyse avec GPT-4...');
+      updateStep('analyze', 'processing');
+      setProgress('🧠 Analyse intelligente en cours...');
       
       const analyzeResponse = await fetch('/api/analyze', {
         method: 'POST',
@@ -119,12 +336,21 @@ export default function MeetingTranscriber() {
       });
 
       if (!analyzeResponse.ok) {
-        throw new Error('Erreur lors de l\'analyse');
+        const errorData = await analyzeResponse.json().catch(() => ({}));
+        throw new Error(errorData.error || `Erreur lors de l'analyse (${analyzeResponse.status})`);
       }
 
       const analysisData = await analyzeResponse.json();
 
+      if (!analysisData.success) {
+        throw new Error(analysisData.error || 'Erreur lors de l\'analyse');
+      }
+
+      updateStep('analyze', 'completed');
+      setProgress('✅ Analyse terminée avec succès');
+
       // Step 3: Generate Word document
+      updateStep('generate', 'processing');
       setProgress('📄 Génération du document Word...');
       
       const docResponse = await fetch('/api/generate-doc', {
@@ -139,7 +365,8 @@ export default function MeetingTranscriber() {
       });
 
       if (!docResponse.ok) {
-        throw new Error('Erreur lors de la génération du document');
+        const errorData = await docResponse.json().catch(() => ({}));
+        throw new Error(errorData.error || `Erreur lors de la génération du document (${docResponse.status})`);
       }
 
       // Create download URL
@@ -147,24 +374,42 @@ export default function MeetingTranscriber() {
       const url = URL.createObjectURL(blob);
       const filename = `Meeting-Summary-${file.name.replace(/\.[^/.]+$/, '')}.docx`;
 
+      updateStep('generate', 'completed');
       setDownloadUrl(url);
       setResult({
         success: true,
         analysis: analysisData.analysis,
         filename,
       });
-      setProgress('✅ Traitement terminé avec succès !');
+      setProgress('🎉 Traitement terminé avec succès !');
 
     } catch (error: any) {
       console.error('Processing error:', error);
+      
+      // Update failed step
+      processingSteps.forEach(step => {
+        if (step.status === 'processing') {
+          updateStep(step.id, 'error');
+        }
+      });
+      
       setResult({
         success: false,
-        error: error.message || 'Une erreur est survenue',
+        error: error.message || 'Une erreur est survenue lors du traitement',
       });
       setProgress('❌ Erreur lors du traitement');
     } finally {
       setProcessing(false);
+      setUploadProgress(0);
     }
+  };
+
+  // Retry processing
+  const retryProcessing = () => {
+    setRetryCount(prev => prev + 1);
+    setResult(null);
+    setDownloadUrl(null);
+    processAudio();
   };
 
   // Download the generated document
@@ -176,6 +421,11 @@ export default function MeetingTranscriber() {
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
+      
+      // Clean up blob URL after download
+      setTimeout(() => {
+        URL.revokeObjectURL(downloadUrl);
+      }, 100);
     }
   };
 
@@ -185,8 +435,14 @@ export default function MeetingTranscriber() {
     setResult(null);
     setDownloadUrl(null);
     setProgress('');
+    setProcessingSteps([]);
+    setRetryCount(0);
+    setUploadProgress(0);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
+    }
+    if (downloadUrl) {
+      URL.revokeObjectURL(downloadUrl);
     }
   };
 
@@ -240,8 +496,11 @@ export default function MeetingTranscriber() {
                     <h3 className="text-lg font-semibold text-slate-900 mb-2">
                       Glissez votre fichier audio ici
                     </h3>
-                    <p className="text-slate-500 mb-4">
-                      Formats supportés : MP3, WAV, M4A (max 25MB)
+                    <p className="text-slate-500 mb-2">
+                      Formats supportés : MP3, WAV, M4A, AAC, OGG, WEBM, FLAC
+                    </p>
+                    <p className="text-sm text-slate-400 mb-4">
+                      Taille maximale : 100MB • Division automatique pour les gros fichiers
                     </p>
                     <Button
                       onClick={() => fileInputRef.current?.click()}
@@ -256,7 +515,7 @@ export default function MeetingTranscriber() {
               <input
                 ref={fileInputRef}
                 type="file"
-                accept="audio/*,.mp3,.wav,.m4a"
+                accept="audio/*,.mp3,.wav,.m4a,.aac,.ogg,.webm,.flac"
                 onChange={handleFileChange}
                 className="hidden"
               />
@@ -275,7 +534,19 @@ export default function MeetingTranscriber() {
                   </div>
                   <div>
                     <h3 className="font-semibold text-slate-900">{file.name}</h3>
-                    <p className="text-slate-500">{formatFileSize(file.size)}</p>
+                    <div className="flex gap-4 text-sm text-slate-500">
+                      <span>{formatFileSize(file.size)}</span>
+                      <span>•</span>
+                      <span>Durée estimée: {getEstimatedDuration(file.size)}</span>
+                      {file.size > CHUNK_SIZE && (
+                        <>
+                          <span>•</span>
+                          <span className="text-blue-600">
+                            {Math.ceil(file.size / CHUNK_SIZE)} parties
+                          </span>
+                        </>
+                      )}
+                    </div>
                   </div>
                 </div>
                 <div className="flex gap-2">
@@ -298,15 +569,56 @@ export default function MeetingTranscriber() {
           </Card>
         )}
 
-        {/* Processing */}
-        {processing && (
+        {/* Processing Steps */}
+        {processing && processingSteps.length > 0 && (
           <Card className="w-full mb-6">
             <CardContent className="p-6">
-              <div className="flex items-center gap-4">
-                <Loader2 className="w-6 h-6 animate-spin text-[#E24218]" />
-                <div>
-                  <h3 className="font-semibold text-slate-900">Traitement en cours...</h3>
-                  <p className="text-slate-500">{progress}</p>
+              <div className="space-y-4">
+                <div className="flex items-center gap-4 mb-4">
+                  <Loader2 className="w-6 h-6 animate-spin text-[#E24218]" />
+                  <div>
+                    <h3 className="font-semibold text-slate-900">Traitement en cours...</h3>
+                    <p className="text-slate-500">{progress}</p>
+                  </div>
+                </div>
+                
+                {/* Upload Progress Bar */}
+                {uploadProgress > 0 && uploadProgress < 100 && (
+                  <div className="mb-4">
+                    <div className="bg-gray-200 rounded-full h-2 overflow-hidden">
+                      <div
+                        className="bg-[#E24218] h-full transition-all duration-300"
+                        style={{ width: `${uploadProgress}%` }}
+                      />
+                    </div>
+                    <p className="text-xs text-gray-600 mt-1">{Math.round(uploadProgress)}% téléchargé</p>
+                  </div>
+                )}
+                
+                <div className="space-y-3">
+                  {processingSteps.map((step, index) => (
+                    <div key={step.id} className="flex items-center gap-3">
+                      <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
+                        step.status === 'completed' ? 'bg-green-100 text-green-700' :
+                        step.status === 'processing' ? 'bg-orange-100 text-orange-700' :
+                        step.status === 'error' ? 'bg-red-100 text-red-700' :
+                        'bg-slate-100 text-slate-500'
+                      }`}>
+                        {step.status === 'completed' ? '✓' :
+                         step.status === 'processing' ? <Loader2 className="w-4 h-4 animate-spin" /> :
+                         step.status === 'error' ? '✗' :
+                         index + 1}
+                      </div>
+                      <span className={`flex-1 ${
+                        step.status === 'completed' ? 'text-green-700' :
+                        step.status === 'processing' ? 'text-orange-700' :
+                        step.status === 'error' ? 'text-red-700' :
+                        'text-slate-500'
+                      }`}>
+                        {step.label}
+                      </span>
+                    </div>
+                  ))}
                 </div>
               </div>
             </CardContent>
@@ -336,7 +648,8 @@ export default function MeetingTranscriber() {
                   {result.success ? (
                     <div className="space-y-4">
                       <p className="text-slate-600">
-                        Votre fichier audio a été transcrit et analysé avec succès.
+                        Votre fichier audio a été transcrit et analysé avec succès. 
+                        Le document contient un résumé intelligent, les actions à retenir et la transcription complète.
                       </p>
                       <div className="flex gap-2">
                         <Button
@@ -355,14 +668,31 @@ export default function MeetingTranscriber() {
                       </div>
                     </div>
                   ) : (
-                    <div>
-                      <p className="text-red-600 mb-4">{result.error}</p>
-                      <Button
-                        variant="outline"
-                        onClick={reset}
-                      >
-                        Réessayer
-                      </Button>
+                    <div className="space-y-4">
+                      <div className="flex items-start gap-2 p-3 bg-red-50 rounded-lg">
+                        <AlertCircle className="w-5 h-5 text-red-500 mt-0.5 flex-shrink-0" />
+                        <div>
+                          <p className="text-red-800 font-medium">Détails de l'erreur:</p>
+                          <p className="text-red-700 text-sm">{result.error}</p>
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button
+                          onClick={retryProcessing}
+                          variant="outline"
+                          className="gap-2"
+                          disabled={processing}
+                        >
+                          <RefreshCw className="w-4 h-4" />
+                          Réessayer {retryCount > 0 && `(${retryCount + 1})`}
+                        </Button>
+                        <Button
+                          variant="outline"
+                          onClick={reset}
+                        >
+                          Nouveau fichier
+                        </Button>
+                      </div>
                     </div>
                   )}
                 </div>
