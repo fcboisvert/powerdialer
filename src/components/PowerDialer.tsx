@@ -348,9 +348,9 @@ export default function PowerDialer() {
       }
 
       // Connect Twilio device AFTER the flow is created
-      console.info('device.connect', { to }, '...')
-      const call = await device?.connect({ params: { To: to } });
-      console.info('device.connect result:', call)
+      // console.info('device.connect', { to }, '...')
+      // const call = await device?.connect({ params: { To: to } });
+      // console.info('device.connect result:', call)
 
       // Update states
       setCurrentExecutionSid(json.sid);
