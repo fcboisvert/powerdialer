@@ -5,14 +5,18 @@ interface Env {
     TWILIO_ACCOUNT_SID: string;
     TWILIO_API_KEY: string;
     TWILIO_API_SECRET: string;
-    TWILIO_TWIML_APP_SID
     FLOW_SID: string;
+    TWILIO_TWIML_APP_SID: string;
+
 }
 
 interface Payload {
     agent: string;
 }
-
+// OPTIONS (CORS preflight)
+export const onRequestOptions: PagesFunction<Env> = async () => {
+    return new Response(null, { status: 204, headers: corsHeaders });
+};
 export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     let payload: Payload;
 

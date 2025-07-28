@@ -15,7 +15,7 @@ export async function initTwilioDevice(agent: string): Promise<void> {
   try {
     const payload = { agent }
     const res = await fetch(`/api/studio/token`, {
-      method: 'POST',  // ← ADD THIS
+      method: 'POST',  // ← ADDED
       body: JSON.stringify(payload),
       headers: { 'content-type': 'application/json' }
     })
@@ -25,24 +25,25 @@ export async function initTwilioDevice(agent: string): Promise<void> {
     // Typed options for codec prefs (avoids inference issues)
     const options: Partial<Device.Options> = {
       codecPreferences: [Call.Codec.Opus, Call.Codec.PCMU],
+      edge: 'montreal',  // ← ADDED
+      logLevel: 1        // ← ADDED for debugging
     };
 
     device = new Device(data.token, options);
 
-    // Add edge location for better connectivity
-    device.updateOptions({
-      edge: 'montreal',  // or your nearest edge
-      sounds: {
-        incoming: true,
-        outgoing: true,
-        disconnect: true
-      }
-    });
+    // Export to window for debugging
+    if (typeof window !== 'undefined') {
+      (window as any).getTwilioDevice = getTwilioDevice;
+    }
+
     device.on('ready', () => console.log('🔔 Twilio Device ready'));
     device.on('error', (error) => console.error('❌ Twilio error:', error));
-    //device.on('incoming', (conn: Call) => conn.accept()); // Reject unexpected inbound, removed for now
+    device.on('registered', () => console.log('✅ Device registered with Twilio'));  // ← ADDED
+    device.on('unregistered', () => console.log('❌ Device unregistered'));  // ← ADDED
+    // REMOVED the incoming handler - PowerDialer handles incoming calls
 
     await device.register(); // Ensures device is fully registered for status
+    console.log('📞 Device register() called for:', agent);  // ← ADDED
   } catch (err: any) {
     console.error("Twilio init error:", err);
     throw err; // Propagate for caller handling

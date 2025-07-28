@@ -151,7 +151,7 @@ export default function PowerDialer() {
   // Helper to start polling KV for outcome until we get it or timeout
   // ------------------------------------------------------------------
   const clearPollingOutcome = () => {
-    pollTimer?.close();
+    if (pollTimer) clearTimeout(pollTimer);  // ← CORRECT
     // Nothing to cancel yet — placeholder for future polling cancel logic
   };
 
@@ -363,7 +363,15 @@ export default function PowerDialer() {
           activityName: get(current, "Nom_de_l_Activite"),
         },
       };
-
+      // ADD DEBUG HERE
+      console.log('🔍 Debug - Agent identity:', agent);
+      console.log('🔍 Debug - Flow parameters:', payload.parameters);
+      // Right before the fetch call
+      console.log('📋 FULL DEBUG INFO:');
+      console.log('- Agent identity:', agent);
+      console.log('- Caller ID:', callerId);
+      console.log('- To number:', to);
+      console.log('- Full payload:', JSON.stringify(payload, null, 2));
       // Trigger the Studio flow
       const res = await fetch(`${STUDIO_API_URL}/create-execution`, {
         method: "POST",
