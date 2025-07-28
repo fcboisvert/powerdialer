@@ -5,8 +5,8 @@
  */
 
 interface Env {
-  AIRTABLE_READ_TOKEN: string;
-  AIRTABLE_WRITE_TOKEN: string;
+  AIRTABLE_TOKEN: string;
+  AIRTABLE_TOKEN: string;
   AIRTABLE_BASE: string;
   AIRTABLE_TABLE: string;
 }
@@ -48,7 +48,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   )}?view=${encodeURIComponent(agentView)}`;
 
   try {
-    const records = await fetchAll(baseUrl, env.AIRTABLE_READ_TOKEN);
+    const records = await fetchAll(baseUrl, env.AIRTABLE_TOKEN);
     return json(records.map(mapRecord), 200);
   } catch (err) {
     console.error("Airtable GET error:", err);
@@ -81,7 +81,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   const res = await fetch(patchUrl, {
     method: "PATCH",
     headers: {
-      Authorization: `Bearer ${env.AIRTABLE_WRITE_TOKEN}`,
+      Authorization: `Bearer ${env.AIRTABLE_TOKEN}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
@@ -165,7 +165,7 @@ function mapRecord(r: AirtableRecord) {
     Resultat_Appel: f("Résultat (Appel)"),
     Opportunity: f("Opportunity"),
     Activite_HC: f("Activité HC"),
-    Nom_du_responsable: f("Nom du Responsable"), 
-    Message_content: f("Message content"), 
+    Nom_du_responsable: f("Nom du Responsable"),
+    Message_content: f("Message content"),
   };
 }

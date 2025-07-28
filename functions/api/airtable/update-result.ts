@@ -14,10 +14,15 @@ interface UpdateResultPayload {
 }
 
 interface Env {
-  AIRTABLE_WRITE_TOKEN: string;
+  AIRTABLE_TOKEN: string;
   AIRTABLE_BASE: string;
   AIRTABLE_TABLE: string;
 }
+
+const OUTCOME_MAP = new Map(Object.entries({
+  "Boite_Vocale": "recVhLI35Yc5CeZ6k",
+  "Pas_Joignable": "reci10aDNnoaNqpy",
+}))
 
 export const onRequest: PagesFunction<Env> = async ({ request, env }) => {
   const corsHeaders = {
@@ -63,6 +68,14 @@ export const onRequest: PagesFunction<Env> = async ({ request, env }) => {
       headers: { "content-type": "application/json", ...corsHeaders },
     });
   }
+  const resultId = OUTCOME_MAP.get(result)
+  if (!resultId) {
+    const valid = [...OUTCOME_MAP.keys()].map((s) => `'${s}'`).join(', ');
+    return new Response(JSON.stringify({ error: `Invalid result '${result}'. Expected one of: ${valid}` }), {
+      status: 400,
+      headers: { "content-type": "application/json", ...corsHeaders },
+    });
+  }
 
   const url = `https://api.airtable.com/v0/${env.AIRTABLE_BASE}/${encodeURIComponent(
     env.AIRTABLE_TABLE
@@ -70,13 +83,14 @@ export const onRequest: PagesFunction<Env> = async ({ request, env }) => {
 
   const airtablePayload = {
     fields: {
-      "Resultat de l'Activite": result,
-      "Notes Rencontres": meetingNotes ?? "",
-      "Notes (Appel)": notes ?? "",
-      "Date et Heure Rencontre": meetingDatetime ?? "",
-      "Statut de l'Activite": "Fait",
-      "Updated By": agent,
-      "Updated At": new Date().toISOString(),
+      "Resultat de l'Activite": [resultId],
+      "Notes Rencontres": meetingNotes ?? "", // CONFIRMED
+      // "Notes (Appel)": notes ?? "", // BAD
+      // "Date Realisee": new Date().toISOString(), // UNNECESSARY
+      "Date et Heure Rencontre": meetingDatetime ?? undefined, // CONFIRMED
+      "Statut de l'Activite": "Fait", // CONFIRMED
+      // "Updated By": agent, // BAD
+      // "Updated At": new Date().toISOString(), // BAD
     },
   };
 
@@ -84,7 +98,7 @@ export const onRequest: PagesFunction<Env> = async ({ request, env }) => {
     const airtableRes = await fetch(url, {
       method: "PATCH",
       headers: {
-        Authorization: `Bearer ${env.AIRTABLE_WRITE_TOKEN}`,
+        Authorization: `Bearer ${env.AIRTABLE_TOKEN}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify(airtablePayload),
@@ -95,7 +109,7 @@ export const onRequest: PagesFunction<Env> = async ({ request, env }) => {
     if (!airtableRes.ok) {
       console.error("❌ Airtable update failed", airtableJson);
       return new Response(
-        JSON.stringify({ success: false, error: airtableJson }),
+        JSON.stringify({ success: false, error: airtableJson, input: airtablePayload }),
         { status: 500, headers: { "content-type": "application/json", ...corsHeaders } }
       );
     }
