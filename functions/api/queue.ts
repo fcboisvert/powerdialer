@@ -29,7 +29,7 @@ const SLUG_TO_AGENT: Record<string, string> = {
   simon: "Simon McConnell",
 };
 
-const F_STATUS = "Statut de l'Activité";
+const F_STATUS = "Statut de l'Activite";
 
 /* ───── GET handler ───── */
 
