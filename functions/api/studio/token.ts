@@ -1,5 +1,5 @@
 /// <reference types="@cloudflare/workers-types" />
-import * as twilio from 'twilio';
+import * as twilio from '@twilio/voice-sdk';
 
 interface Env {
     TWILIO_ACCOUNT_SID: string;
