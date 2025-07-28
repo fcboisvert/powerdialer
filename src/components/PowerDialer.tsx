@@ -249,6 +249,24 @@ export default function PowerDialer() {
   // Simplified Twilio device initialization
   useEffect(() => {
     initTwilioDevice(agentKey); // ✅ already passes the identity
+
+    // Add event handlers for incoming calls from Studio flow
+    const device = getTwilioDevice();
+    if (device) {
+      device.on('incoming', (conn) => {
+        console.log('Incoming bridge from flow:', conn.parameters);
+        setCallState(CALL_STATES.FLOW_ACTIVE);
+        setStatus("📞 Appel connecté - parlez maintenant");
+        conn.accept(); // Auto-accept the incoming call
+      });
+
+      device.on('disconnect', () => {
+        console.log('Call disconnected');
+        setCallState(CALL_STATES.COMPLETED);
+        setStatus("📞 Appel terminé - remplir le formulaire");
+        setShowForm(true);
+      });
+    }
   }, [agentKey]);
 
   // Ensure form is visible when in appropriate states
