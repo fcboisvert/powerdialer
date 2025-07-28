@@ -248,25 +248,39 @@ export default function PowerDialer() {
 
   // Simplified Twilio device initialization
   useEffect(() => {
-    initTwilioDevice(agentKey); // ✅ already passes the identity
+    const setupDevice = async () => {
+      await initTwilioDevice(agentKey); // Wait for initialization
 
-    // Add event handlers for incoming calls from Studio flow
-    const device = getTwilioDevice();
-    if (device) {
-      device.on('incoming', (conn) => {
-        console.log('Incoming bridge from flow:', conn.parameters);
-        setCallState(CALL_STATES.FLOW_ACTIVE);
-        setStatus("📞 Appel connecté - parlez maintenant");
-        conn.accept(); // Auto-accept the incoming call
-      });
+      const device = getTwilioDevice();
+      if (device) {
+        // Remove any existing listeners first
+        device.removeAllListeners('incoming');
+        device.removeAllListeners('disconnect');
 
-      device.on('disconnect', () => {
-        console.log('Call disconnected');
-        setCallState(CALL_STATES.COMPLETED);
-        setStatus("📞 Appel terminé - remplir le formulaire");
-        setShowForm(true);
-      });
-    }
+        device.on('incoming', (conn) => {
+          console.log('🔔 Incoming call from Studio flow');
+          console.log('Call parameters:', conn.parameters);
+          setCallState(CALL_STATES.FLOW_ACTIVE);
+          setStatus("📞 Appel connecté - parlez maintenant");
+          clearPollingOutcome(); // Stop polling when call connects
+          conn.accept(); // Auto-accept the incoming call
+        });
+
+        device.on('disconnect', (conn) => {
+          console.log('📞 Call disconnected');
+          setCallState(CALL_STATES.COMPLETED);
+          setStatus("📞 Appel terminé - remplir le formulaire");
+          setShowForm(true);
+        });
+
+        // Also handle device-level disconnect
+        device.on('disconnected', () => {
+          console.log('📱 Device disconnected');
+        });
+      }
+    };
+
+    setupDevice();
   }, [agentKey]);
 
   // Ensure form is visible when in appropriate states

@@ -14,7 +14,11 @@ export async function initTwilioDevice(agent: string): Promise<void> {
 
   try {
     const payload = { agent }
-    const res = await fetch(`/api/studio/token`, { body: JSON.stringify(payload), headers: { 'content-type': 'application/json' } })
+    const res = await fetch(`/api/studio/token`, {
+      method: 'POST',  // ← ADD THIS
+      body: JSON.stringify(payload),
+      headers: { 'content-type': 'application/json' }
+    })
     if (!res.ok) throw new Error(`Failed to fetch Twilio token: ${res.status}`);
     const data: { token: string } = await res.json();
 
@@ -25,9 +29,18 @@ export async function initTwilioDevice(agent: string): Promise<void> {
 
     device = new Device(data.token, options);
 
+    // Add edge location for better connectivity
+    device.updateOptions({
+      edge: 'montreal',  // or your nearest edge
+      sounds: {
+        incoming: true,
+        outgoing: true,
+        disconnect: true
+      }
+    });
     device.on('ready', () => console.log('🔔 Twilio Device ready'));
     device.on('error', (error) => console.error('❌ Twilio error:', error));
-    device.on('incoming', (conn: Call) => conn.accept());
+    //device.on('incoming', (conn: Call) => conn.accept()); // Reject unexpected inbound, removed for now
 
     await device.register(); // Ensures device is fully registered for status
   } catch (err: any) {
