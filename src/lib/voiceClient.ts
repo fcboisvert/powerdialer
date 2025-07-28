@@ -1,6 +1,5 @@
 // src/lib/voiceClient.ts - Optimized for outgoing calls with proper registration
-import { Device } from '@twilio/voice-sdk';
-import type { DeviceOptions } from '@twilio/voice-sdk';
+import { Device, Call } from '@twilio/voice-sdk';
 
 let device: Device | null = null;
 
@@ -8,28 +7,27 @@ let device: Device | null = null;
  * Initialise a single Twilio Device for this browser tab.
  * Re-uses the instance if it already exists.
  */
-export async function initTwilioDevice(identity: string): Promise<void> {
+export async function initTwilioDevice(agent: string): Promise<void> {
   if (device) {
     return; // Already initialized; no-op to avoid duplicates
   }
 
   try {
-    const res = await fetch(`/api/generate-access-token?identity=${encodeURIComponent(identity)}`);
+    const payload = { agent }
+    const res = await fetch(`/api/studio/token`, { body: JSON.stringify(payload), headers: { 'content-type': 'application/json' } })
     if (!res.ok) throw new Error(`Failed to fetch Twilio token: ${res.status}`);
     const data: { token: string } = await res.json();
 
     // Typed options for codec prefs (avoids inference issues)
-    const options: Partial<DeviceOptions> = {
-      codecPreferences: ['opus', 'pcmu'] as ('opus' | 'pcmu')[],
-      debug: import.meta.env.DEV, // Debug only in dev
-      enableRingingState: true,
+    const options: Partial<Device.Options> = {
+      codecPreferences: [Call.Codec.Opus, Call.Codec.PCMU],
     };
 
     device = new Device(data.token, options);
 
     device.on('ready', () => console.log('🔔 Twilio Device ready'));
     device.on('error', (error) => console.error('❌ Twilio error:', error));
-    device.on('incoming', (conn) => conn.reject()); // Reject unexpected inbound
+    device.on('incoming', (conn: Call) => conn.accept()); // Reject unexpected inbound
 
     await device.register(); // Ensures device is fully registered for status
   } catch (err: any) {

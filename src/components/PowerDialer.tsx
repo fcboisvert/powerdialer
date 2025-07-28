@@ -278,10 +278,10 @@ export default function PowerDialer() {
       digits.length === 10
         ? `+1${digits}`
         : digits.length === 11 && digits.startsWith("1")
-        ? `+${digits}`
-        : raw.startsWith("+")
-        ? raw
-        : null;
+          ? `+${digits}`
+          : raw.startsWith("+")
+            ? raw
+            : null;
 
     if (!to || !/^\+\d{10,15}$/.test(to)) {
       setStatus("Numéro de destination invalide !");
@@ -345,7 +345,9 @@ export default function PowerDialer() {
       }
 
       // Connect Twilio device AFTER the flow is created
-      device?.connect({ params: { To: to } });
+      console.info('device.connect', { to }, '...')
+      const call = await device?.connect({ params: { To: to } });
+      console.info('device.connect result:', call)
 
       // Update states
       setCurrentExecutionSid(json.sid);
@@ -580,19 +582,18 @@ export default function PowerDialer() {
           </div>
         </div>
         <div
-          className={`rounded-md px-4 py-3 text-sm ring-1 ${
-            callState === CALL_STATES.TRIGGERING_FLOW
-              ? "bg-blue-50 ring-blue-200 text-blue-800"
-              : callState === CALL_STATES.FLOW_ACTIVE
+          className={`rounded-md px-4 py-3 text-sm ring-1 ${callState === CALL_STATES.TRIGGERING_FLOW
+            ? "bg-blue-50 ring-blue-200 text-blue-800"
+            : callState === CALL_STATES.FLOW_ACTIVE
               ? "bg-yellow-50 ring-yellow-200 text-yellow-800"
               : callState === CALL_STATES.WAITING_OUTCOME
-              ? "bg-orange-50 ring-orange-200 text-orange-800"
-              : callState === CALL_STATES.COMPLETED
-              ? "bg-green-50 ring-green-200 text-green-800"
-              : callState === CALL_STATES.ERROR
-              ? "bg-red-50 ring-red-200 text-red-800"
-              : "bg-zinc-50 ring-zinc-100"
-          }`}
+                ? "bg-orange-50 ring-orange-200 text-orange-800"
+                : callState === CALL_STATES.COMPLETED
+                  ? "bg-green-50 ring-green-200 text-green-800"
+                  : callState === CALL_STATES.ERROR
+                    ? "bg-red-50 ring-red-200 text-red-800"
+                    : "bg-zinc-50 ring-zinc-100"
+            }`}
         >
           <div className="flex items-center gap-2">
             {callState === CALL_STATES.TRIGGERING_FLOW && (
