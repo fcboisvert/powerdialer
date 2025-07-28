@@ -13,79 +13,59 @@ const corsHeaders = {
     "Access-Control-Allow-Headers": "Content-Type",
 };
 
-// Base64 URL encoding helper
-function base64url(str: string): string {
-    return btoa(str)
-        .replace(/\+/g, '-')
-        .replace(/\//g, '_')
-        .replace(/=/g, '');
-}
-
 export const onRequestOptions: PagesFunction<Env> = async () => {
     return new Response(null, { status: 204, headers: corsHeaders });
 };
 
 export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     try {
-        // Parse request body
-        let body: any;
-        try {
-            body = await request.json();
-        } catch (e) {
-            return new Response(JSON.stringify({ error: 'Invalid JSON in request body' }), {
-                status: 400,
-                headers: { 'Content-Type': 'application/json', ...corsHeaders }
-            });
-        }
-
-        // Extract agent from body
-        const agent = body?.agent;
-
+        const { agent } = await request.json();
         if (!agent) {
-            return new Response(JSON.stringify({ error: 'missing agent', received: body }), {
+            return new Response(JSON.stringify({ error: 'missing agent' }), {
                 status: 400,
                 headers: { 'Content-Type': 'application/json', ...corsHeaders }
             });
         }
 
-        // Log for debugging
-        console.log('Generating token for agent:', agent);
-
-        // For Cloudflare Workers, we need to use crypto.subtle for HMAC
+        // Use a simpler approach - base64 encode everything
         const now = Math.floor(Date.now() / 1000);
-        const expires = now + 3600;
+        const exp = now + 3600; // 1 hour
 
-        const header = {
+        // Create the JWT manually with proper structure
+        const header = JSON.stringify({
             typ: 'JWT',
             alg: 'HS256',
             cty: 'twilio-fpa;v=1'
-        };
+        });
 
-        const grants = {
-            identity: agent,
-            voice: {
-                incoming: { allow: true },
-                outgoing: {
-                    application_sid: env.TWILIO_TWIML_APP_SID
-                }
-            }
-        };
-
-        const payload = {
+        const payload = JSON.stringify({
             jti: `${env.TWILIO_API_KEY}-${now}`,
             iss: env.TWILIO_API_KEY,
             sub: env.TWILIO_ACCOUNT_SID,
-            nbf: now,
-            exp: expires,
-            grants: grants
+            iat: now,
+            exp: exp,
+            grants: {
+                identity: agent,
+                voice: {
+                    incoming: { allow: true },
+                    outgoing: {
+                        application_sid: env.TWILIO_TWIML_APP_SID
+                    }
+                }
+            }
+        });
+
+        // Base64URL encode
+        const base64urlEscape = (str: string) => {
+            return str.replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
         };
 
-        const headerStr = base64url(JSON.stringify(header));
-        const payloadStr = base64url(JSON.stringify(payload));
-        const toSign = `${headerStr}.${payloadStr}`;
+        const encodedHeader = base64urlEscape(btoa(header));
+        const encodedPayload = base64urlEscape(btoa(payload));
 
-        // Create HMAC-SHA256 signature using Web Crypto API
+        // Create signature
         const encoder = new TextEncoder();
+        const data = encoder.encode(`${encodedHeader}.${encodedPayload}`);
         const key = await crypto.subtle.importKey(
             'raw',
             encoder.encode(env.TWILIO_API_SECRET),
@@ -94,14 +74,13 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
             ['sign']
         );
 
-        const signature = await crypto.subtle.sign(
-            'HMAC',
-            key,
-            encoder.encode(toSign)
-        );
+        const signature = await crypto.subtle.sign('HMAC', key, data);
+        const encodedSignature = base64urlEscape(btoa(String.fromCharCode(...new Uint8Array(signature))));
 
-        const signatureStr = base64url(String.fromCharCode(...new Uint8Array(signature)));
-        const token = `${toSign}.${signatureStr}`;
+        const token = `${encodedHeader}.${encodedPayload}.${encodedSignature}`;
+
+        // Debug log
+        console.log('Token generated for:', agent);
 
         return new Response(JSON.stringify({ token }), {
             status: 200,
@@ -111,8 +90,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
         console.error('Token generation error:', error);
         return new Response(JSON.stringify({
             error: 'Token generation failed',
-            details: error.message,
-            stack: error.stack
+            details: error.message
         }), {
             status: 500,
             headers: { 'Content-Type': 'application/json', ...corsHeaders }
