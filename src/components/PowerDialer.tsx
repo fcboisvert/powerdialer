@@ -39,8 +39,10 @@ const AIRTABLE_UPDATE_URL = "https://texion.app/api/airtable/update-result";
 const OUTCOME_POLL_URL = "https://texion.app/api/outcome";
 
 const AGENT_CALLER_IDS: Record<string, string[]> = {
-  "Frédéric-Charles Boisvert": ["+14388178171"],
-  "Simon McConnell": ["+14388178177"],
+  // "Frédéric-Charles Boisvert": ["+14388178171"],
+  // "Simon McConnell": ["+14388178177"],
+  frederic: ["+14388178171"],
+  simon: ["+14388178177"],
 };
 const AGENT_NAME_MAP: Record<string, string> = {
   frederic: "Frédéric-Charles Boisvert",
