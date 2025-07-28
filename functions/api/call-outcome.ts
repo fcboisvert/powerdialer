@@ -107,7 +107,7 @@ export const onRequest: PagesFunction<Env> = async (ctx) => {
       body: JSON.stringify({
         recordId,
         activityName: activityName,
-        result: outcome === "Boite_Vocale" ? "Répondeur" : outcome,
+        result: outcome,
         notes: "",
         agent: agent,
         meetingNotes: "",
