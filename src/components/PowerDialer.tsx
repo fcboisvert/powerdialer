@@ -68,7 +68,8 @@ export default function PowerDialer() {
       ? "simon"
       : "frederic"
   ) as "frederic" | "simon";
-  const agent = AGENT_NAME_MAP[agentKey];
+  const agent = agentKey;
+  // const agent = AGENT_NAME_MAP[agentKey];
   const [callerId, setCallerId] = useState(AGENT_CALLER_IDS[agent][0]);
   const [callState, setCallState] = useState<
     (typeof CALL_STATES)[keyof typeof CALL_STATES]
