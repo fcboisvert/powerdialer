@@ -29,11 +29,11 @@ export default {
     try {
       const formData = await request.formData();
       const audioFile = formData.get('audio') as File;
-      
+
       if (!audioFile) {
-        return new Response(JSON.stringify({ 
+        return new Response(JSON.stringify({
           success: false,
-          error: 'No audio file provided' 
+          error: 'No audio file provided'
         }), {
           status: 400,
           headers: {
@@ -46,9 +46,9 @@ export default {
       // Validate file size (20MB limit to be safe)
       const MAX_SIZE = 20 * 1024 * 1024;
       if (audioFile.size > MAX_SIZE) {
-        return new Response(JSON.stringify({ 
+        return new Response(JSON.stringify({
           success: false,
-          error: 'File chunk too large' 
+          error: 'File chunk too large'
         }), {
           status: 400,
           headers: {

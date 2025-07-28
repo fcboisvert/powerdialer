@@ -65,9 +65,9 @@ export default {
       const { transcription } = body;
 
       if (!transcription) {
-        return new Response(JSON.stringify({ 
+        return new Response(JSON.stringify({
           success: false,
-          error: 'No transcription provided' 
+          error: 'No transcription provided'
         }), {
           status: 400,
           headers: {

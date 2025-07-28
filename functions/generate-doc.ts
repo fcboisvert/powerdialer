@@ -42,7 +42,7 @@ const createWordDocument = async (content: string, originalFilename: string): Pr
 
     // Check if this is a heading (starts with number or specific keywords)
     const isHeading = /^(\d+\.|•|RÉSUMÉ|SUMMARY|ACTION|TRANSCRIPT|TRANSCRIPTION)/i.test(trimmedSection);
-    
+
     if (isHeading) {
       paragraphs.push(
         new Paragraph({
@@ -136,9 +136,9 @@ export default {
       const { content, filename } = body;
 
       if (!content) {
-        return new Response(JSON.stringify({ 
+        return new Response(JSON.stringify({
           success: false,
-          error: 'No content provided' 
+          error: 'No content provided'
         }), {
           status: 400,
           headers: {
@@ -153,7 +153,7 @@ export default {
 
       // Set headers for file download
       const outputFilename = `Meeting-Summary-${filename?.replace(/\.[^/.]+$/, '') || 'transcript'}.docx`;
-      
+
       return new Response(buffer, {
         headers: {
           'Content-Type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
