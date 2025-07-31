@@ -46,8 +46,13 @@ interface ProcessingStep {
 }
 
 const SUPPORTED_FORMATS = [
-  'audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/m4a',
-  'audio/aac', 'audio/ogg', 'audio/webm', 'audio/flac'
+  'audio/mpeg',     // MP3, MPEG
+  'audio/mp3',      // MP3
+  'audio/wav',      // WAV
+  'audio/x-wav',    // WAV (alternative MIME type)
+  'audio/mp4',      // MP4, M4A
+  'audio/x-m4a',    // M4A (alternative MIME type)
+  'audio/webm',     // WEBM
 ];
 
 const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
@@ -160,8 +165,9 @@ export default function MeetingTranscriber() {
       file.type === format || file.name.toLowerCase().endsWith(format.split('/')[1])
     );
 
+    // And update the error message in validateFile function:
     if (!isValidFormat) {
-      return 'Format de fichier non supporté. Formats acceptés: MP3, WAV, M4A, AAC, OGG, WEBM, FLAC';
+      return 'Format de fichier non supporté. Formats acceptés: MP3, WAV, M4A, MP4, MPEG, WEBM';
     }
 
     return null;
@@ -568,7 +574,7 @@ export default function MeetingTranscriber() {
                       Glissez votre fichier audio ici
                     </h3>
                     <p className="text-slate-500 mb-2">
-                      Formats supportés : MP3, WAV, M4A, AAC, OGG, WEBM, FLAC
+                      Formats supportés : MP3, WAV, M4A, MP4, MPEG, WEBM
                     </p>
                     <p className="text-sm text-slate-400 mb-4">
                       Taille maximale : 100MB • Division automatique pour les gros fichiers
@@ -583,10 +589,11 @@ export default function MeetingTranscriber() {
                   </div>
                 </div>
               </div>
+              // Replace with:
               <input
                 ref={fileInputRef}
                 type="file"
-                accept="audio/*,.mp3,.wav,.m4a,.aac,.ogg,.webm,.flac"
+                accept=".mp3,.wav,.m4a,.mp4,.mpeg,.mpga,.webm,audio/mpeg,audio/wav,audio/mp4,audio/webm"
                 onChange={handleFileChange}
                 className="hidden"
               />
@@ -683,9 +690,9 @@ export default function MeetingTranscriber() {
                   {processingSteps.map((step, index) => (
                     <div key={step.id} className="flex items-center gap-3">
                       <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${step.status === 'completed' ? 'bg-green-100 text-green-700' :
-                          step.status === 'processing' ? 'bg-orange-100 text-orange-700' :
-                            step.status === 'error' ? 'bg-red-100 text-red-700' :
-                              'bg-slate-100 text-slate-500'
+                        step.status === 'processing' ? 'bg-orange-100 text-orange-700' :
+                          step.status === 'error' ? 'bg-red-100 text-red-700' :
+                            'bg-slate-100 text-slate-500'
                         }`}>
                         {step.status === 'completed' ? '✓' :
                           step.status === 'processing' ? <Loader2 className="w-4 h-4 animate-spin" /> :
@@ -693,9 +700,9 @@ export default function MeetingTranscriber() {
                               index + 1}
                       </div>
                       <span className={`flex-1 ${step.status === 'completed' ? 'text-green-700' :
-                          step.status === 'processing' ? 'text-orange-700' :
-                            step.status === 'error' ? 'text-red-700' :
-                              'text-slate-500'
+                        step.status === 'processing' ? 'text-orange-700' :
+                          step.status === 'error' ? 'text-red-700' :
+                            'text-slate-500'
                         }`}>
                         {step.label}
                         {step.id === 'analyze' && asyncJobId && ' (Traitement en arrière-plan)'}
