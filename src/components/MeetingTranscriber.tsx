@@ -160,13 +160,30 @@ export default function MeetingTranscriber() {
       return `Fichier trop volumineux. Taille maximale: ${MAX_FILE_SIZE / 1024 / 1024}MB, votre fichier: ${Math.round(file.size / 1024 / 1024)}MB`;
     }
 
-    // Check file format
-    const isValidFormat = SUPPORTED_FORMATS.some(format =>
-      file.type === format || file.name.toLowerCase().endsWith(format.split('/')[1])
-    );
+    // Define supported extensions
+    const supportedExtensions = ['.mp3', '.wav', '.m4a', '.mp4', '.mpeg', '.mpga', '.webm'];
 
-    // And update the error message in validateFile function:
+    // Get file extension
+    const fileName = file.name.toLowerCase();
+    const fileExtension = fileName.substring(fileName.lastIndexOf('.'));
+
+    // Check MIME type
+    const hasValidMimeType = SUPPORTED_FORMATS.some(format => file.type === format);
+
+    // Check file extension
+    const hasValidExtension = supportedExtensions.includes(fileExtension);
+
+    // File is valid if either MIME type or extension matches
+    const isValidFormat = hasValidMimeType || hasValidExtension;
+
     if (!isValidFormat) {
+      console.log('File validation failed:', {
+        fileName: file.name,
+        mimeType: file.type,
+        extension: fileExtension,
+        hasValidMimeType,
+        hasValidExtension
+      });
       return 'Format de fichier non supporté. Formats acceptés: MP3, WAV, M4A, MP4, MPEG, WEBM';
     }
 
@@ -191,11 +208,16 @@ export default function MeetingTranscriber() {
     setDragActive(false);
 
     const droppedFiles = Array.from(e.dataTransfer.files);
-    const audioFile = droppedFiles.find(file =>
-      SUPPORTED_FORMATS.some(format =>
-        file.type === format || file.name.toLowerCase().endsWith(format.split('/')[1])
-      )
-    );
+
+    // Find first audio file with supported extension or MIME type
+    const audioFile = droppedFiles.find(file => {
+      const fileName = file.name.toLowerCase();
+      const fileExtension = fileName.substring(fileName.lastIndexOf('.'));
+      const supportedExtensions = ['.mp3', '.wav', '.m4a', '.mp4', '.mpeg', '.mpga', '.webm'];
+
+      return SUPPORTED_FORMATS.some(format => file.type === format) ||
+        supportedExtensions.includes(fileExtension);
+    });
 
     if (audioFile) {
       const validationError = validateFile(audioFile);
@@ -557,8 +579,8 @@ export default function MeetingTranscriber() {
             <CardContent className="p-8">
               <div
                 className={`border-2 border-dashed rounded-xl p-8 text-center transition-all ${dragActive
-                  ? 'border-[#E24218] bg-orange-50'
-                  : 'border-slate-300 hover:border-slate-400'
+                    ? 'border-[#E24218] bg-orange-50'
+                    : 'border-slate-300 hover:border-slate-400'
                   }`}
                 onDragEnter={handleDrag}
                 onDragLeave={handleDrag}
@@ -589,7 +611,6 @@ export default function MeetingTranscriber() {
                   </div>
                 </div>
               </div>
-              // Replace with:
               <input
                 ref={fileInputRef}
                 type="file"
@@ -690,9 +711,9 @@ export default function MeetingTranscriber() {
                   {processingSteps.map((step, index) => (
                     <div key={step.id} className="flex items-center gap-3">
                       <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${step.status === 'completed' ? 'bg-green-100 text-green-700' :
-                        step.status === 'processing' ? 'bg-orange-100 text-orange-700' :
-                          step.status === 'error' ? 'bg-red-100 text-red-700' :
-                            'bg-slate-100 text-slate-500'
+                          step.status === 'processing' ? 'bg-orange-100 text-orange-700' :
+                            step.status === 'error' ? 'bg-red-100 text-red-700' :
+                              'bg-slate-100 text-slate-500'
                         }`}>
                         {step.status === 'completed' ? '✓' :
                           step.status === 'processing' ? <Loader2 className="w-4 h-4 animate-spin" /> :
@@ -700,9 +721,9 @@ export default function MeetingTranscriber() {
                               index + 1}
                       </div>
                       <span className={`flex-1 ${step.status === 'completed' ? 'text-green-700' :
-                        step.status === 'processing' ? 'text-orange-700' :
-                          step.status === 'error' ? 'text-red-700' :
-                            'text-slate-500'
+                          step.status === 'processing' ? 'text-orange-700' :
+                            step.status === 'error' ? 'text-red-700' :
+                              'text-slate-500'
                         }`}>
                         {step.label}
                         {step.id === 'analyze' && asyncJobId && ' (Traitement en arrière-plan)'}
