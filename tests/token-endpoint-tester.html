@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Token-Public Endpoint Tester</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #0f172a;
+            color: #e2e8f0;
+        }
+
+        h1 {
+            color: #38bdf8;
+            border-bottom: 2px solid #1e293b;
+            padding-bottom: 10px;
+        }
+
+        .test-section {
+            background: #1e293b;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+            border: 1px solid #334155;
+        }
+
+        .test-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        h2 {
+            color: #60a5fa;
+            margin: 0;
+        }
+
+        .status {
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .status.pending {
+            background: #475569;
+            color: #cbd5e1;
+        }
+
+        .status.success {
+            background: #166534;
+            color: #4ade80;
+        }
+
+        .status.error {
+            background: #7f1d1d;
+            color: #f87171;
+        }
+
+        .result-box {
+            background: #0f172a;
+            border: 1px solid #334155;
+            border-radius: 4px;
+            padding: 15px;
+            margin: 10px 0;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 13px;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+
+        button {
+            background: #3b82f6;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            transition: background 0.2s;
+        }
+
+        button:hover {
+            background: #2563eb;
+        }
+
+        button:disabled {
+            background: #475569;
+            cursor: not-allowed;
+        }
+
+        .control-panel {
+            background: #1e293b;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            border: 1px solid #334155;
+        }
+
+        .endpoint-info {
+            background: #0f172a;
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 15px;
+            border: 1px solid #334155;
+        }
+
+        .error-msg {
+            color: #f87171;
+        }
+
+        .success-msg {
+            color: #4ade80;
+        }
+
+        .warning-msg {
+            color: #fbbf24;
+        }
+
+        .info-msg {
+            color: #60a5fa;
+        }
+
+        .test-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+            gap: 20px;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>🔧 Token-Public Endpoint Diagnostic Tool</h1>
+
+    <div class="control-panel">
+        <div class="endpoint-info">
+            <strong>Endpoint:</strong> <span id="endpoint-url">https://almond-mouse-3471.twil.io/token-public</span><br>
+            <strong>Status:</strong> Testing for crashes, CORS issues, and response format
+        </div>
+        <button id="run-all-tests" onclick="runAllTests()">Run All Tests</button>
+        <button id="clear-results" onclick="clearResults()" style="margin-left: 10px; background: #64748b;">Clear
+            Results</button>
+    </div>
+
+    <div class="test-grid">
+        <!-- Test 1: OPTIONS Request (CORS Preflight) -->
+        <div class="test-section" id="test-options">
+            <div class="test-header">
+                <h2>1. OPTIONS Request (CORS)</h2>
+                <span class="status pending">Pending</span>
+            </div>
+            <div class="result-box">Waiting to test CORS preflight...</div>
+        </div>
+
+        <!-- Test 2: GET Request without params -->
+        <div class="test-section" id="test-get-no-params">
+            <div class="test-header">
+                <h2>2. GET (No Parameters)</h2>
+                <span class="status pending">Pending</span>
+            </div>
+            <div class="result-box">Waiting to test GET without agent...</div>
+        </div>
+
+        <!-- Test 3: GET Request with agent -->
+        <div class="test-section" id="test-get-with-agent">
+            <div class="test-header">
+                <h2>3. GET (With Agent)</h2>
+                <span class="status pending">Pending</span>
+            </div>
+            <div class="result-box">Waiting to test GET with agent=test-agent...</div>
+        </div>
+
+        <!-- Test 4: POST Request without body -->
+        <div class="test-section" id="test-post-no-body">
+            <div class="test-header">
+                <h2>4. POST (No Body)</h2>
+                <span class="status pending">Pending</span>
+            </div>
+            <div class="result-box">Waiting to test POST without body...</div>
+        </div>
+
+        <!-- Test 5: POST Request with JSON body -->
+        <div class="test-section" id="test-post-with-body">
+            <div class="test-header">
+                <h2>5. POST (JSON Body)</h2>
+                <span class="status pending">Pending</span>
+            </div>
+            <div class="result-box">Waiting to test POST with agent in body...</div>
+        </div>
+
+        <!-- Test 6: Response Time Test -->
+        <div class="test-section" id="test-response-time">
+            <div class="test-header">
+                <h2>6. Response Time</h2>
+                <span class="status pending">Pending</span>
+            </div>
+            <div class="result-box">Waiting to test response time...</div>
+        </div>
+    </div>
+
+    <script>
+        const ENDPOINT = 'https://almond-mouse-3471.twil.io/token-public';
+
+        function parseResponse(text) {
+            try {
+                // Try to parse as JSON
+                let data = JSON.parse(text);
+                // If data is a string, it might be double-stringified
+                if (typeof data === 'string') {
+                    data = JSON.parse(data);
+                }
+                return { success: true, data };
+            } catch (e) {
+                return { success: false, error: e.message };
+            }
+        }
+
+        function updateTestStatus(testId, status, result) {
+            const section = document.getElementById(testId);
+            const statusEl = section.querySelector('.status');
+            const resultEl = section.querySelector('.result-box');
+
+            statusEl.className = `status ${status}`;
+            statusEl.textContent = status.charAt(0).toUpperCase() + status.slice(1);
+            resultEl.innerHTML = result;
+        }
+
+        async function testOptionsRequest() {
+            const testId = 'test-options';
+            try {
+                const start = Date.now();
+                const response = await fetch(ENDPOINT, {
+                    method: 'OPTIONS',
+                    headers: {
+                        'Origin': window.location.origin,
+                        'Access-Control-Request-Method': 'POST',
+                        'Access-Control-Request-Headers': 'Content-Type'
+                    }
+                });
+                const elapsed = Date.now() - start;
+
+                let result = `<span class="info-msg">Response Time: ${elapsed}ms</span>\n`;
+                result += `<span class="info-msg">Status: ${response.status} ${response.statusText}</span>\n\n`;
+
+                result += '<strong>Response Headers:</strong>\n';
+                const headers = {};
+                response.headers.forEach((value, key) => {
+                    headers[key] = value;
+                    if (key.toLowerCase().includes('access-control')) {
+                        result += `<span class="success-msg">${key}: ${value}</span>\n`;
+                    } else {
+                        result += `${key}: ${value}\n`;
+                    }
+                });
+
+                if ((response.status === 200 || response.status === 204) && headers['access-control-allow-origin']) {
+                    updateTestStatus(testId, 'success', result);
+                } else {
+                    result += `\n<span class="error-msg">⚠️ CORS headers missing or incorrect status</span>`;
+                    updateTestStatus(testId, 'error', result);
+                }
+            } catch (error) {
+                updateTestStatus(testId, 'error',
+                    `<span class="error-msg">❌ Failed to complete OPTIONS request</span>\n` +
+                    `Error: ${error.message}\n\n` +
+                    `<span class="warning-msg">This indicates the function is crashing before sending headers</span>`
+                );
+            }
+        }
+
+        async function testGetNoParams() {
+            const testId = 'test-get-no-params';
+            try {
+                const start = Date.now();
+                const response = await fetch(ENDPOINT, {
+                    method: 'GET',
+                    headers: {
+                        'Accept': 'application/json'
+                    }
+                });
+                const elapsed = Date.now() - start;
+
+                let result = `<span class="info-msg">Response Time: ${elapsed}ms</span>\n`;
+                result += `<span class="info-msg">Status: ${response.status} ${response.statusText}</span>\n\n`;
+
+                try {
+                    const text = await response.text();
+                    const parseResult = parseResponse(text);
+
+                    if (parseResult.success) {
+                        const data = parseResult.data;
+                        result += '<strong>Response Body:</strong>\n';
+                        result += JSON.stringify(data, null, 2);
+
+                        if (data.token) {
+                            result += `\n\n<span class="success-msg">✓ Token received (${data.token.length} chars)</span>`;
+                            updateTestStatus(testId, 'success', result);
+                        } else if (data.error) {
+                            result += `\n\n<span class="error-msg">⚠️ Error response: ${data.error}</span>`;
+                            updateTestStatus(testId, 'error', result);
+                        } else {
+                            result += `\n\n<span class="warning-msg">⚠️ Unexpected response format</span>`;
+                            updateTestStatus(testId, 'error', result);
+                        }
+                    } else {
+                        result += `<strong>Response (raw):</strong>\n${text}`;
+                        result += `\n\n<span class="error-msg">⚠️ Failed to parse JSON: ${parseResult.error}</span>`;
+                        updateTestStatus(testId, 'error', result);
+                    }
+                } catch (e) {
+                    result += `\n\n<span class="error-msg">⚠️ Response processing error: ${e.message}</span>`;
+                    updateTestStatus(testId, 'error', result);
+                }
+            } catch (error) {
+                updateTestStatus(testId, 'error',
+                    `<span class="error-msg">❌ Request failed</span>\n` +
+                    `Error: ${error.message}`
+                );
+            }
+        }
+
+        async function testGetWithAgent() {
+            const testId = 'test-get-with-agent';
+            try {
+                const start = Date.now();
+                const response = await fetch(`${ENDPOINT}?agent=test-agent`, {
+                    method: 'GET',
+                    headers: {
+                        'Accept': 'application/json'
+                    }
+                });
+                const elapsed = Date.now() - start;
+
+                let result = `<span class="info-msg">Response Time: ${elapsed}ms</span>\n`;
+                result += `<span class="info-msg">Status: ${response.status} ${response.statusText}</span>\n\n`;
+
+                try {
+                    const text = await response.text();
+                    const parseResult = parseResponse(text);
+
+                    if (parseResult.success) {
+                        const data = parseResult.data;
+                        result += '<strong>Response Body:</strong>\n';
+                        result += JSON.stringify(data, null, 2);
+
+                        if (data.token) {
+                            result += `\n\n<span class="success-msg">✓ Token received with agent parameter</span>`;
+                            // Decode token to check identity
+                            try {
+                                const payload = JSON.parse(atob(data.token.split('.')[1]));
+                                result += `\n<span class="info-msg">Token identity: ${payload.grants?.identity || 'not found'}</span>`;
+                            } catch (e) {
+                                // Token decode failed
+                            }
+                            updateTestStatus(testId, 'success', result);
+                        } else {
+                            result += `\n\n<span class="error-msg">⚠️ No token in response</span>`;
+                            updateTestStatus(testId, 'error', result);
+                        }
+                    } else {
+                        result += `<strong>Response (raw):</strong>\n${text}`;
+                        result += `\n\n<span class="error-msg">⚠️ Failed to parse JSON: ${parseResult.error}</span>`;
+                        updateTestStatus(testId, 'error', result);
+                    }
+                } catch (e) {
+                    result += `\n\n<span class="error-msg">⚠️ Request error: ${e.message}</span>`;
+                    updateTestStatus(testId, 'error', result);
+                }
+            } catch (error) {
+                updateTestStatus(testId, 'error',
+                    `<span class="error-msg">❌ Request failed</span>\n` +
+                    `Error: ${error.message}`
+                );
+            }
+        }
+
+        async function testPostNoBody() {
+            const testId = 'test-post-no-body';
+            try {
+                const start = Date.now();
+                const response = await fetch(ENDPOINT, {
+                    method: 'POST',
+                    headers: {
+                        'Accept': 'application/json',
+                        'Content-Type': 'application/json'
+                    }
+                });
+                const elapsed = Date.now() - start;
+
+                let result = `<span class="info-msg">Response Time: ${elapsed}ms</span>\n`;
+                result += `<span class="info-msg">Status: ${response.status} ${response.statusText}</span>\n\n`;
+
+                try {
+                    const text = await response.text();
+                    const parseResult = parseResponse(text);
+
+                    if (parseResult.success) {
+                        const data = parseResult.data;
+                        result += '<strong>Response Body:</strong>\n';
+                        result += JSON.stringify(data, null, 2);
+
+                        if (data.token) {
+                            result += `\n\n<span class="success-msg">✓ Token received (POST without body)</span>`;
+                            updateTestStatus(testId, 'success', result);
+                        } else {
+                            result += `\n\n<span class="warning-msg">⚠️ No token in response</span>`;
+                            updateTestStatus(testId, 'error', result);
+                        }
+                    } else {
+                        result += `<strong>Response (raw):</strong>\n${text}`;
+                        result += `\n\n<span class="error-msg">⚠️ Failed to parse JSON: ${parseResult.error}</span>`;
+                        updateTestStatus(testId, 'error', result);
+                    }
+                } catch (e) {
+                    result += `\n\n<span class="error-msg">⚠️ Request error: ${e.message}</span>`;
+                    updateTestStatus(testId, 'error', result);
+                }
+            } catch (error) {
+                updateTestStatus(testId, 'error',
+                    `<span class="error-msg">❌ Request failed</span>\n` +
+                    `Error: ${error.message}`
+                );
+            }
+        }
+
+        async function testPostWithBody() {
+            const testId = 'test-post-with-body';
+            try {
+                const start = Date.now();
+                const response = await fetch(ENDPOINT, {
+                    method: 'POST',
+                    headers: {
+                        'Accept': 'application/json',
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ agent: 'post-test-agent' })
+                });
+                const elapsed = Date.now() - start;
+
+                let result = `<span class="info-msg">Response Time: ${elapsed}ms</span>\n`;
+                result += `<span class="info-msg">Status: ${response.status} ${response.statusText}</span>\n`;
+                result += `<span class="info-msg">Request Body: {"agent": "post-test-agent"}</span>\n\n`;
+
+                try {
+                    const text = await response.text();
+                    const parseResult = parseResponse(text);
+
+                    if (parseResult.success) {
+                        const data = parseResult.data;
+                        result += '<strong>Response Body:</strong>\n';
+                        result += JSON.stringify(data, null, 2);
+
+                        if (data.token) {
+                            result += `\n\n<span class="success-msg">✓ Token received (POST with JSON body)</span>`;
+                            // Decode token to check identity
+                            try {
+                                const payload = JSON.parse(atob(data.token.split('.')[1]));
+                                result += `\n<span class="info-msg">Token identity: ${payload.grants?.identity || 'not found'}</span>`;
+                            } catch (e) {
+                                // Token decode failed
+                            }
+                            updateTestStatus(testId, 'success', result);
+                        } else {
+                            result += `\n\n<span class="error-msg">⚠️ No token in response</span>`;
+                            updateTestStatus(testId, 'error', result);
+                        }
+                    } else {
+                        result += `<strong>Response (raw):</strong>\n${text}`;
+                        result += `\n\n<span class="error-msg">⚠️ Failed to parse JSON: ${parseResult.error}</span>`;
+                        updateTestStatus(testId, 'error', result);
+                    }
+                } catch (e) {
+                    result += `\n\n<span class="error-msg">⚠️ Request error: ${e.message}</span>`;
+                    updateTestStatus(testId, 'error', result);
+                }
+            } catch (error) {
+                updateTestStatus(testId, 'error',
+                    `<span class="error-msg">❌ Request failed</span>\n` +
+                    `Error: ${error.message}`
+                );
+            }
+        }
+
+        async function testResponseTime() {
+            const testId = 'test-response-time';
+            const times = [];
+            let result = '<strong>Testing 5 consecutive requests...</strong>\n\n';
+
+            for (let i = 1; i <= 5; i++) {
+                try {
+                    const start = Date.now();
+                    const response = await fetch(`${ENDPOINT}?agent=perf-test-${i}`, {
+                        method: 'GET',
+                        headers: { 'Accept': 'application/json' }
+                    });
+                    const elapsed = Date.now() - start;
+                    times.push(elapsed);
+
+                    if (response.ok) {
+                        result += `<span class="success-msg">Request ${i}: ${elapsed}ms ✓</span>\n`;
+                    } else {
+                        result += `<span class="error-msg">Request ${i}: ${elapsed}ms (Status: ${response.status})</span>\n`;
+                    }
+                } catch (error) {
+                    result += `<span class="error-msg">Request ${i}: Failed - ${error.message}</span>\n`;
+                }
+            }
+
+            if (times.length > 0) {
+                const avg = Math.round(times.reduce((a, b) => a + b, 0) / times.length);
+                const min = Math.min(...times);
+                const max = Math.max(...times);
+
+                result += `\n<strong>Statistics:</strong>\n`;
+                result += `Average: ${avg}ms\n`;
+                result += `Min: ${min}ms, Max: ${max}ms\n`;
+
+                if (avg < 500) {
+                    result += `\n<span class="success-msg">✓ Good response times</span>`;
+                    updateTestStatus(testId, 'success', result);
+                } else if (avg < 1000) {
+                    result += `\n<span class="warning-msg">⚠️ Slow response times</span>`;
+                    updateTestStatus(testId, 'warning', result);
+                } else {
+                    result += `\n<span class="error-msg">❌ Very slow response times</span>`;
+                    updateTestStatus(testId, 'error', result);
+                }
+            } else {
+                updateTestStatus(testId, 'error', result);
+            }
+        }
+
+        async function runAllTests() {
+            const button = document.getElementById('run-all-tests');
+            button.disabled = true;
+            button.textContent = 'Running Tests...';
+
+            // Reset all test statuses
+            document.querySelectorAll('.test-section').forEach(section => {
+                section.querySelector('.status').className = 'status pending';
+                section.querySelector('.status').textContent = 'Running...';
+                section.querySelector('.result-box').textContent = 'Test in progress...';
+            });
+
+            // Run tests sequentially to avoid overwhelming the server
+            await testOptionsRequest();
+            await new Promise(resolve => setTimeout(resolve, 500));
+
+            await testGetNoParams();
+            await new Promise(resolve => setTimeout(resolve, 500));
+
+            await testGetWithAgent();
+            await new Promise(resolve => setTimeout(resolve, 500));
+
+            await testPostNoBody();
+            await new Promise(resolve => setTimeout(resolve, 500));
+
+            await testPostWithBody();
+            await new Promise(resolve => setTimeout(resolve, 500));
+
+            await testResponseTime();
+
+            button.disabled = false;
+            button.textContent = 'Run All Tests';
+        }
+
+        function clearResults() {
+            document.querySelectorAll('.test-section').forEach(section => {
+                section.querySelector('.status').className = 'status pending';
+                section.querySelector('.status').textContent = 'Pending';
+                section.querySelector('.result-box').textContent = 'Waiting to test...';
+            });
+        }
+    </script>
+</body>
+
+</html>

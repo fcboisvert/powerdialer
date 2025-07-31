@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import {
@@ -12,15 +12,30 @@ import {
   ArrowLeft,
   AlertCircle,
   RefreshCw,
+  Clock,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import Logo from '/texion-logo.svg';
+
+const fetchWithTimeout = async (resource: RequestInfo, options: RequestInit = {}, timeout = 300000) => { // 5 min timeout
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), timeout);
+  const response = await fetch(resource, {
+    ...options,
+    signal: controller.signal,
+  });
+  clearTimeout(id);
+  return response;
+};
 
 interface TranscriptionResult {
   success: boolean;
   analysis?: string;
   error?: string;
   filename?: string;
+  jobId?: string; // For async processing
+  processedBy?: 'sync' | 'async';
+  model?: string;
 }
 
 interface ProcessingStep {
@@ -36,7 +51,8 @@ const SUPPORTED_FORMATS = [
 ];
 
 const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
-const CHUNK_SIZE = 20 * 1024 * 1024; // 20MB chunks for Whisper API
+const CHUNK_SIZE = 10 * 1024 * 1024; // 10MB chunks
+const POLLING_INTERVAL = 2000; // 2 seconds
 
 // Utility function to chunk files in browser
 const chunkFile = (file: File, chunkSize: number = CHUNK_SIZE): Blob[] => {
@@ -64,13 +80,63 @@ export default function MeetingTranscriber() {
   const [processingSteps, setProcessingSteps] = useState<ProcessingStep[]>([]);
   const [retryCount, setRetryCount] = useState(0);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [asyncJobId, setAsyncJobId] = useState<string | null>(null);
+  const [pollingCount, setPollingCount] = useState(0);
+
+  // Polling for async job status
+  useEffect(() => {
+    if (!asyncJobId) return;
+
+    const pollInterval = setInterval(async () => {
+      try {
+        const response = await fetchWithTimeout(`/analyze-status?jobId=${asyncJobId}`, {
+          method: 'GET',
+        }, 30000);
+
+        if (!response.ok) {
+          throw new Error('Failed to check job status');
+        }
+
+        const jobData = await response.json();
+
+        if (jobData.status === 'completed') {
+          clearInterval(pollInterval);
+          setAsyncJobId(null);
+          setPollingCount(0);
+
+          // Update UI with completed analysis
+          updateStep('analyze', 'completed');
+          setProgress('✅ Analyse terminée avec succès');
+
+          // Continue with document generation
+          await generateDocument(jobData.analysis, file!.name, jobData);
+        } else if (jobData.status === 'failed') {
+          clearInterval(pollInterval);
+          setAsyncJobId(null);
+          setPollingCount(0);
+          throw new Error(jobData.error || 'Async analysis failed');
+        } else {
+          // Still processing
+          setPollingCount(prev => prev + 1);
+          setProgress(`🧠 Analyse en cours... (${Math.floor(pollingCount * POLLING_INTERVAL / 1000)}s)`);
+        }
+      } catch (error) {
+        clearInterval(pollInterval);
+        setAsyncJobId(null);
+        setPollingCount(0);
+        handleError(error);
+      }
+    }, POLLING_INTERVAL);
+
+    return () => clearInterval(pollInterval);
+  }, [asyncJobId, pollingCount]);
 
   // Initialize processing steps
   const initializeSteps = () => {
     setProcessingSteps([
       { id: 'upload', label: 'Téléchargement du fichier', status: 'pending' },
       { id: 'transcribe', label: 'Transcription audio (Whisper)', status: 'pending' },
-      { id: 'analyze', label: 'Analyse intelligente (GPT-4)', status: 'pending' },
+      { id: 'analyze', label: 'Analyse intelligente (GPT)', status: 'pending' },
       { id: 'generate', label: 'Génération du document Word', status: 'pending' },
     ]);
   };
@@ -139,6 +205,7 @@ export default function MeetingTranscriber() {
       setResult(null);
       setDownloadUrl(null);
       setRetryCount(0);
+      setAsyncJobId(null);
     } else {
       setResult({
         success: false,
@@ -164,6 +231,7 @@ export default function MeetingTranscriber() {
       setResult(null);
       setDownloadUrl(null);
       setRetryCount(0);
+      setAsyncJobId(null);
     }
   };
 
@@ -187,6 +255,79 @@ export default function MeetingTranscriber() {
     return `~${hours}h ${mins}min`;
   };
 
+  // Generate document
+  const generateDocument = async (analysis: string, filename: string, metadata?: any) => {
+    updateStep('generate', 'processing');
+    setProgress('📄 Génération du document Word...');
+
+    const docResponse = await fetchWithTimeout('/generate-doc', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        content: analysis,
+        filename: filename,
+        metadata: {
+          model: metadata?.model,
+          processedBy: metadata?.processedBy,
+        }
+      }),
+    }, 60000); // 1 min timeout
+
+    if (!docResponse.ok) {
+      const errorData = await docResponse.json().catch(() => ({}));
+      throw new Error(errorData.error || `Erreur lors de la génération du document (${docResponse.status})`);
+    }
+
+    // Create download URL
+    const blob = await docResponse.blob();
+    const url = URL.createObjectURL(blob);
+    const outputFilename = `Meeting-Summary-${filename.replace(/\.[^/.]+$/, '')}.docx`;
+
+    updateStep('generate', 'completed');
+    setDownloadUrl(url);
+    setResult({
+      success: true,
+      analysis: analysis,
+      filename: outputFilename,
+      processedBy: metadata?.processedBy,
+      model: metadata?.model,
+    });
+    setProgress('🎉 Traitement terminé avec succès !');
+  };
+
+  // Handle errors
+  const handleError = (error: any) => {
+    console.error('Processing error:', error);
+
+    let userFriendlyError = error.message || 'Une erreur est survenue lors du traitement';
+
+    // Specific handling for different error types
+    if (error.name === 'AbortError') {
+      userFriendlyError = 'Le traitement a pris trop de temps et a été interrompu. Veuillez réessayer avec un fichier plus court.';
+    } else if (error.message?.includes('524')) {
+      userFriendlyError = 'Le serveur a mis trop de temps à répondre. Votre fichier est peut-être trop long.';
+    } else if (error.message?.includes('413')) {
+      userFriendlyError = 'Le fichier est trop volumineux pour être traité.';
+    }
+
+    // Update failed step
+    processingSteps.forEach(step => {
+      if (step.status === 'processing') {
+        updateStep(step.id, 'error');
+      }
+    });
+
+    setResult({
+      success: false,
+      error: userFriendlyError,
+    });
+    setProgress('❌ Erreur lors du traitement');
+    setProcessing(false);
+    setUploadProgress(0);
+  };
+
   // Process the audio file
   const processAudio = async () => {
     if (!file) return;
@@ -194,6 +335,8 @@ export default function MeetingTranscriber() {
     setProcessing(true);
     setProgress('🔄 Initialisation du traitement...');
     setUploadProgress(0);
+    setAsyncJobId(null);
+    setPollingCount(0);
     initializeSteps();
 
     try {
@@ -210,10 +353,10 @@ export default function MeetingTranscriber() {
         const formData = new FormData();
         formData.append('audio', file);
 
-        const transcribeResponse = await fetch('/transcribe', {
+        const transcribeResponse = await fetchWithTimeout('/transcribe', {
           method: 'POST',
           body: formData,
-        });
+        }, 180000); // 3 min timeout
 
         if (!transcribeResponse.ok) {
           const errorData = await transcribeResponse.json().catch(() => ({}));
@@ -244,10 +387,10 @@ export default function MeetingTranscriber() {
           const chunkFile = new File([chunks[i]], `${file.name}.part${i}`, { type: file.type });
           formData.append('audio', chunkFile);
 
-          const response = await fetch('/transcribe', {
+          const response = await fetchWithTimeout('/transcribe', {
             method: 'POST',
             body: formData,
-          });
+          }, 180000); // 3 min timeout per chunk
 
           if (!response.ok) {
             const errorData = await response.json().catch(() => ({}));
@@ -275,11 +418,11 @@ export default function MeetingTranscriber() {
       setProgress('✅ Transcription terminée avec succès');
       setUploadProgress(0);
 
-      // Step 2: Analyze with GPT-4
+      // Step 2: Analyze with GPT
       updateStep('analyze', 'processing');
       setProgress('🧠 Analyse intelligente en cours...');
 
-      const analyzeResponse = await fetch('/analyze', {
+      const analyzeResponse = await fetchWithTimeout('/analyze', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -287,7 +430,7 @@ export default function MeetingTranscriber() {
         body: JSON.stringify({
           transcription: fullTranscription,
         }),
-      });
+      }, 300000); // 5 min timeout
 
       if (!analyzeResponse.ok) {
         const errorData = await analyzeResponse.json().catch(() => ({}));
@@ -295,6 +438,15 @@ export default function MeetingTranscriber() {
       }
 
       const analysisData = await analyzeResponse.json();
+
+      // Check if it's async processing
+      if (analysisData.jobId) {
+        setAsyncJobId(analysisData.jobId);
+        setProgress('🔄 Analyse complexe détectée - Traitement en arrière-plan...');
+        updateStep('analyze', 'processing');
+        // The useEffect will handle polling
+        return;
+      }
 
       if (!analysisData.success) {
         throw new Error(analysisData.error || 'Erreur lors de l\'analyse');
@@ -304,65 +456,29 @@ export default function MeetingTranscriber() {
       setProgress('✅ Analyse terminée avec succès');
 
       // Step 3: Generate Word document
-      updateStep('generate', 'processing');
-      setProgress('📄 Génération du document Word...');
-
-      const docResponse = await fetch('/generate-doc', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          content: analysisData.analysis,
-          filename: file.name,
-        }),
-      });
-
-      if (!docResponse.ok) {
-        const errorData = await docResponse.json().catch(() => ({}));
-        throw new Error(errorData.error || `Erreur lors de la génération du document (${docResponse.status})`);
-      }
-
-      // Create download URL
-      const blob = await docResponse.blob();
-      const url = URL.createObjectURL(blob);
-      const filename = `Meeting-Summary-${file.name.replace(/\.[^/.]+$/, '')}.docx`;
-
-      updateStep('generate', 'completed');
-      setDownloadUrl(url);
-      setResult({
-        success: true,
-        analysis: analysisData.analysis,
-        filename,
-      });
-      setProgress('🎉 Traitement terminé avec succès !');
+      await generateDocument(analysisData.analysis, file.name, analysisData);
 
     } catch (error: any) {
-      console.error('Processing error:', error);
-
-      // Update failed step
-      processingSteps.forEach(step => {
-        if (step.status === 'processing') {
-          updateStep(step.id, 'error');
-        }
-      });
-
-      setResult({
-        success: false,
-        error: error.message || 'Une erreur est survenue lors du traitement',
-      });
-      setProgress('❌ Erreur lors du traitement');
-    } finally {
-      setProcessing(false);
-      setUploadProgress(0);
+      handleError(error);
     }
   };
 
   // Retry processing
+  const MAX_FRONTEND_RETRIES = 2;
+
   const retryProcessing = () => {
+    if (retryCount >= MAX_FRONTEND_RETRIES) {
+      setResult({
+        success: false,
+        error: 'Nombre maximal de tentatives atteint. Veuillez réessayer plus tard ou utiliser un fichier plus petit.',
+      });
+      return;
+    }
+
     setRetryCount(prev => prev + 1);
     setResult(null);
     setDownloadUrl(null);
+    setAsyncJobId(null);
     processAudio();
   };
 
@@ -392,6 +508,8 @@ export default function MeetingTranscriber() {
     setProcessingSteps([]);
     setRetryCount(0);
     setUploadProgress(0);
+    setAsyncJobId(null);
+    setPollingCount(0);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -548,13 +666,26 @@ export default function MeetingTranscriber() {
                   </div>
                 )}
 
+                {/* Async Processing Notice */}
+                {asyncJobId && (
+                  <div className="mb-4 p-3 bg-blue-50 rounded-lg flex items-center gap-3">
+                    <Clock className="w-5 h-5 text-blue-600" />
+                    <div className="flex-1">
+                      <p className="text-sm text-blue-800 font-medium">Traitement complexe en cours</p>
+                      <p className="text-xs text-blue-600">
+                        Votre fichier nécessite un traitement approfondi. Cela peut prendre quelques minutes.
+                      </p>
+                    </div>
+                  </div>
+                )}
+
                 <div className="space-y-3">
                   {processingSteps.map((step, index) => (
                     <div key={step.id} className="flex items-center gap-3">
                       <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${step.status === 'completed' ? 'bg-green-100 text-green-700' :
-                        step.status === 'processing' ? 'bg-orange-100 text-orange-700' :
-                          step.status === 'error' ? 'bg-red-100 text-red-700' :
-                            'bg-slate-100 text-slate-500'
+                          step.status === 'processing' ? 'bg-orange-100 text-orange-700' :
+                            step.status === 'error' ? 'bg-red-100 text-red-700' :
+                              'bg-slate-100 text-slate-500'
                         }`}>
                         {step.status === 'completed' ? '✓' :
                           step.status === 'processing' ? <Loader2 className="w-4 h-4 animate-spin" /> :
@@ -562,11 +693,12 @@ export default function MeetingTranscriber() {
                               index + 1}
                       </div>
                       <span className={`flex-1 ${step.status === 'completed' ? 'text-green-700' :
-                        step.status === 'processing' ? 'text-orange-700' :
-                          step.status === 'error' ? 'text-red-700' :
-                            'text-slate-500'
+                          step.status === 'processing' ? 'text-orange-700' :
+                            step.status === 'error' ? 'text-red-700' :
+                              'text-slate-500'
                         }`}>
                         {step.label}
+                        {step.id === 'analyze' && asyncJobId && ' (Traitement en arrière-plan)'}
                       </span>
                     </div>
                   ))}
@@ -581,8 +713,7 @@ export default function MeetingTranscriber() {
           <Card className="w-full">
             <CardContent className="p-6">
               <div className="flex items-start gap-4">
-                <div className={`p-3 rounded-full ${result.success ? 'bg-green-100' : 'bg-red-100'
-                  }`}>
+                <div className={`p-3 rounded-full ${result.success ? 'bg-green-100' : 'bg-red-100'}`}>
                   {result.success ? (
                     <CheckCircle className="w-6 h-6 text-green-600" />
                   ) : (
@@ -590,8 +721,7 @@ export default function MeetingTranscriber() {
                   )}
                 </div>
                 <div className="flex-1">
-                  <h3 className={`font-semibold mb-2 ${result.success ? 'text-green-900' : 'text-red-900'
-                    }`}>
+                  <h3 className={`font-semibold mb-2 ${result.success ? 'text-green-900' : 'text-red-900'}`}>
                     {result.success ? 'Transcription réussie !' : 'Erreur de transcription'}
                   </h3>
                   {result.success ? (
@@ -600,6 +730,14 @@ export default function MeetingTranscriber() {
                         Votre fichier audio a été transcrit et analysé avec succès.
                         Le document contient un résumé intelligent, les actions à retenir et la transcription complète.
                       </p>
+
+                      {/* Processing info */}
+                      {(result.processedBy || result.model) && (
+                        <div className="text-xs text-slate-500 bg-slate-50 p-2 rounded">
+                          Traité avec: {result.model || 'AI'} • Mode: {result.processedBy === 'async' ? 'Traitement approfondi' : 'Traitement rapide'}
+                        </div>
+                      )}
+
                       <div className="flex gap-2">
                         <Button
                           onClick={downloadDocument}
