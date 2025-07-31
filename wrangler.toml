@@ -13,7 +13,7 @@ binding = "TRANSCRIPTION_JOBS"
 id = "dafb21320269482f9b571954c8e3c3a7"
 [[kv_namespaces]]
 binding = "ANALYSIS_JOBS"
-id = "80a2887314783bbcb2cb2acdc"
+id = "80628807337b416783bbbc82cb2ac8ec"
 [[kv_namespaces]]
 binding = "FILE_STORAGE_KV"
-id = "1e76d3b514b46b873cd217"
+id = "1e7db853e1534b94b189723cd37e9217"

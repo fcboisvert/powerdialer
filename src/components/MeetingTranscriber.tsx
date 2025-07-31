@@ -646,8 +646,8 @@ export default function MeetingTranscriber() {
             <CardContent className="p-8">
               <div
                 className={`border-2 border-dashed rounded-xl p-8 text-center transition-all ${dragActive
-                    ? 'border-[#E24218] bg-orange-50'
-                    : 'border-slate-300 hover:border-slate-400'
+                  ? 'border-[#E24218] bg-orange-50'
+                  : 'border-slate-300 hover:border-slate-400'
                   }`}
                 onDragEnter={handleDrag}
                 onDragLeave={handleDrag}
@@ -787,9 +787,9 @@ export default function MeetingTranscriber() {
                   {processingSteps.map((step, index) => (
                     <div key={step.id} className="flex items-center gap-3">
                       <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${step.status === 'completed' ? 'bg-green-100 text-green-700' :
-                          step.status === 'processing' ? 'bg-orange-100 text-orange-700' :
-                            step.status === 'error' ? 'bg-red-100 text-red-700' :
-                              'bg-slate-100 text-slate-500'
+                        step.status === 'processing' ? 'bg-orange-100 text-orange-700' :
+                          step.status === 'error' ? 'bg-red-100 text-red-700' :
+                            'bg-slate-100 text-slate-500'
                         }`}>
                         {step.status === 'completed' ? '✓' :
                           step.status === 'processing' ? <Loader2 className="w-4 h-4 animate-spin" /> :
@@ -797,9 +797,9 @@ export default function MeetingTranscriber() {
                               index + 1}
                       </div>
                       <span className={`flex-1 ${step.status === 'completed' ? 'text-green-700' :
-                          step.status === 'processing' ? 'text-orange-700' :
-                            step.status === 'error' ? 'text-red-700' :
-                              'text-slate-500'
+                        step.status === 'processing' ? 'text-orange-700' :
+                          step.status === 'error' ? 'text-red-700' :
+                            'text-slate-500'
                         }`}>
                         {step.label}
                         {step.id === 'analyze' && asyncJobId && ' (Traitement en arrière-plan)'}
