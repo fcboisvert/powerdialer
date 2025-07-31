@@ -17,3 +17,6 @@ id = "80628807337b416783bbbc82cb2ac8ec"
 [[kv_namespaces]]
 binding = "FILE_STORAGE_KV"
 id = "1e7db853e1534b94b189723cd37e9217"
+[[queues.producers]]
+binding = "TRANSCRIPTION_QUEUE"
+queue = "transcription-queue"
