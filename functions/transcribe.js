@@ -1,9 +1,9 @@
 export async function onRequestPost(context) {
     const { request, env } = context;
 
-    // Create abort controller with 25s timeout (Cloudflare limit is 30s)
+    // INCREASED TIMEOUT: 28s for Cloudflare's 30s limit (keeping 2s buffer)
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 25000);
+    const timeoutId = setTimeout(() => controller.abort(), 28000); // Increased from 25s to 28s
 
     try {
         const formData = await request.formData();
@@ -79,24 +79,22 @@ export async function onRequestPost(context) {
             console.log('🎵 M4A file detected - applying compatibility fixes');
 
             try {
-                // Read the file into array buffer
                 const arrayBuffer = await audioFile.arrayBuffer();
                 const bytes = new Uint8Array(arrayBuffer);
 
-                // Check file signature (first 16 bytes)
+                // Check file signature
                 const hex = Array.from(bytes.slice(0, 16))
                     .map(b => b.toString(16).padStart(2, '0'))
                     .join('');
 
                 console.log(`🔍 M4A signature: ${hex}`);
 
-                // Verify it's a valid M4A/MP4 file (should have 'ftyp' at offset 4)
+                // Verify it's a valid M4A/MP4 file
                 if (hex.substring(8, 16) !== '66747970') {
                     throw new Error('Invalid M4A file signature - file may be corrupted');
                 }
 
-                // CRITICAL FIX: Convert M4A to MP4 for better Whisper compatibility
-                // Whisper handles MP4 files better than M4A even though they're the same container
+                // Convert M4A to MP4 for better Whisper compatibility
                 const mp4Blob = new Blob([arrayBuffer], { type: 'audio/mp4' });
                 const mp4FileName = audioFile.name.replace(/\.m4a$/i, '.mp4');
                 processedFile = new File([mp4Blob], mp4FileName, {
@@ -104,11 +102,7 @@ export async function onRequestPost(context) {
                     lastModified: audioFile.lastModified
                 });
 
-                console.log('✅ M4A → MP4 conversion applied:', {
-                    originalName: audioFile.name,
-                    newName: processedFile.name,
-                    type: processedFile.type
-                });
+                console.log('✅ M4A → MP4 conversion applied');
 
             } catch (m4aError) {
                 console.error('❌ M4A processing error:', m4aError);
@@ -117,7 +111,7 @@ export async function onRequestPost(context) {
                 return new Response(JSON.stringify({
                     success: false,
                     error: 'This M4A file is not compatible with the transcription API.',
-                    suggestion: 'The M4A file may use an unsupported codec (ALAC, protected AAC, etc.). Please convert to MP3 for better compatibility.'
+                    suggestion: 'The M4A file may use an unsupported codec. Please convert to MP3 for better compatibility.'
                 }), {
                     status: 400,
                     headers: {
@@ -153,17 +147,13 @@ export async function onRequestPost(context) {
         const { default: OpenAI } = await import('openai');
         const openai = new OpenAI({
             apiKey: env.OPENAI_API_KEY,
-            timeout: 24000, // Slightly less than our abort timeout
+            timeout: 27000, // Slightly less than our abort timeout (was 24000)
         });
 
         const startTime = Date.now();
 
         try {
-            console.log(`📤 Sending to Whisper:`, {
-                name: processedFile.name,
-                type: processedFile.type,
-                size: (processedFile.size / 1024 / 1024).toFixed(2) + 'MB'
-            });
+            console.log(`📤 Sending to Whisper (${fileInfo.sizeInMB}MB file)...`);
 
             // Call Whisper API with minimal parameters for better compatibility
             const response = await openai.audio.transcriptions.create({
@@ -178,7 +168,7 @@ export async function onRequestPost(context) {
             clearTimeout(timeoutId);
 
             const processingTime = Date.now() - startTime;
-            console.log(`✅ Transcription successful in ${processingTime}ms`);
+            console.log(`✅ Transcription successful in ${processingTime}ms (${(processingTime / 1000).toFixed(1)}s)`);
 
             return new Response(JSON.stringify({
                 success: true,
@@ -204,18 +194,20 @@ export async function onRequestPost(context) {
                 message: innerError.message,
                 status: innerError.status,
                 code: innerError.code,
-                type: innerError.constructor.name
+                type: innerError.constructor.name,
+                processingTime: Date.now() - startTime
             });
 
             if (innerError.name === 'AbortError') {
+                const timeElapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+                console.error(`⏱️ Request aborted after ${timeElapsed}s`);
+
                 return new Response(JSON.stringify({
                     success: false,
-                    error: 'Transcription timeout - file may be too long for processing.',
-                    suggestion: fileExtension === '.m4a'
-                        ? 'M4A files often take longer to process. Try converting to MP3.'
-                        : 'Try compressing your audio file or using a shorter segment.'
+                    error: `Request was aborted after ${timeElapsed}s. The file may be too complex to process within time limits.`,
+                    suggestion: 'Try compressing your audio to reduce processing time: ffmpeg -i input.mp3 -b:a 64k -ar 16000 -ac 1 output.mp3'
                 }), {
-                    status: 524,
+                    status: 500,
                     headers: {
                         'Content-Type': 'application/json',
                         'Access-Control-Allow-Origin': '*',
@@ -270,6 +262,10 @@ export async function onRequestPost(context) {
             errorMessage = 'Invalid audio file format or corrupted file.';
             suggestion = 'Ensure your file is a valid audio file and try converting to MP3 if problems persist.';
             statusCode = 400;
+        } else if (error.message?.includes('timeout')) {
+            errorMessage = 'Processing timeout - file took too long to process.';
+            suggestion = 'Compress your audio for faster processing: ffmpeg -i input.mp3 -b:a 64k -ar 16000 -ac 1 output.mp3';
+            statusCode = 504;
         }
 
         return new Response(JSON.stringify({
