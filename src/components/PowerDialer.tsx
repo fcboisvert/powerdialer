@@ -321,7 +321,8 @@ export default function PowerDialer() {
     }
   }, [callState]);
 
-  // === LOGIC FUNCTIONS ===
+  // In PowerDialer.tsx, update the dial function to NOT use device.connect():
+
   const dial = async () => {
     if (callState !== CALL_STATES.IDLE) {
       setStatus("Opération en cours...");
@@ -351,17 +352,14 @@ export default function PowerDialer() {
       return;
     }
 
-    // Check Twilio device state using isBusy
+    // Check Twilio device state
     const device = getTwilioDevice();
     if (!device) {
       setStatus("❌ Device Twilio non initialisé");
       return;
     }
 
-    if (device.isBusy) {
-      setStatus("📞 Un appel est déjà en cours");
-      return;
-    }
+    // IMPORTANT: Don't check isBusy here since we're not making a direct call
 
     // Set initial states
     setCallState(CALL_STATES.TRIGGERING_FLOW);
@@ -383,28 +381,20 @@ export default function PowerDialer() {
 
       // Create payload with proper casing
       const payload = {
-        to: to, // lowercase
-        from: callerId, // lowercase
+        to: to,
+        from: callerId,
         parameters: {
           recordId: get(current, "Record_ID"),
           callId,
           leadName: get(current, "Full_Name"),
           company: get(current, "Nom_de_la_compagnie"),
           activity: get(current, "Activite_HC"),
-          agent: agentKey, // ← CHANGE THIS from 'agent' to 'agentKey'
+          agent: agentKey, // Use agentKey not full name
           activityName: get(current, "Nom_de_l_Activite"),
         },
       };
 
-      // ADD DEBUG HERE
-      console.log('🔍 Debug - Agent identity:', agent);
-      console.log('🔍 Debug - Flow parameters:', payload.parameters);
-      // Right before the fetch call
-      console.log('📋 FULL DEBUG INFO:');
-      console.log('- Agent identity:', agent);
-      console.log('- Caller ID:', callerId);
-      console.log('- To number:', to);
-      console.log('- Full payload:', JSON.stringify(payload, null, 2));
+      console.log('📋 Studio Flow payload:', JSON.stringify(payload, null, 2));
 
       // Trigger the Studio flow
       const res = await fetch(`${STUDIO_API_URL}/create-execution`, {
@@ -420,65 +410,26 @@ export default function PowerDialer() {
         throw new Error(json.error || "API error");
       }
 
-      // Connect Twilio device AFTER the flow is created
-      console.info('device.connect', { To: to }, '...')
-      const call = await device.connect({ params: { To: to } });
-      console.info('device.connect result:', call)
-
-      // Store call reference for hang() to work properly
-      if (call) {
-        (window as any).currentCall = call;
-
-        // ADD THESE HANDLERS:
-        call.on('accept', () => {
-          console.log('📞 Outgoing call accepted');
-          setCallState(CALL_STATES.FLOW_ACTIVE);
-          setStatus("📞 Appel connecté - parlez maintenant");
-          clearPollingOutcome(); // Stop polling when connected
-        });
-
-        call.on('disconnect', () => {
-          console.log('📞 Outgoing call disconnected');
-          setCallState(CALL_STATES.COMPLETED);
-          setStatus("📞 Appel terminé - remplir le formulaire");
-          setShowForm(true);
-        });
-
-        call.on('error', (error) => {
-          console.error('❌ Call error:', error);
-          setCallState(CALL_STATES.ERROR);
-          setStatus(`❌ Erreur d'appel: ${error.message}`);
-        });
-
-        call.on('ringing', () => {
-          console.log('🔔 Call is ringing...');
-          setStatus("🔔 Sonnerie en cours...");
-        });
-      }
+      // IMPORTANT: DO NOT call device.connect() here!
+      // Just wait for the incoming call from Studio
 
       // Update states
       setCurrentExecutionSid(json.sid);
-      setStatus(`📞 Flow déclenché – ex ${json.sid.slice(-6)}`);
+      setStatus(`📞 Flow déclenché – en attente de connexion...`);
       setCallState(CALL_STATES.WAITING_OUTCOME);
-      setShowForm(true); // Show form immediately
 
-      // Start polling for outcome
-      // Delay polling for outcome to avoid race with Twilio HTTP callback
+      // Don't show form immediately, wait for connection
+      setShowForm(false);
+
+      // The incoming call handler will take care of accepting the call
+      console.log('⏳ Waiting for incoming call from Studio flow...');
+
+      // Start polling for outcome after a delay
       setTimeout(() => {
-        console.log(
-          `[PowerDialer] Starting delayed polling for callId: ${callId}`
-        );
+        console.log(`[PowerDialer] Starting delayed polling for callId: ${callId}`);
         startPollingOutcome(callId);
-      }, 1500); // 1.5 seconds delay
+      }, 3000); // 3 seconds delay to allow connection
 
-      // Debug logging only in development
-      if (import.meta.env.DEV) {
-        console.log("Dial states set:", {
-          callState: CALL_STATES.WAITING_OUTCOME,
-          showForm: true,
-          currentExecutionSid: json.sid,
-        });
-      }
     } catch (err: any) {
       setCallState(CALL_STATES.ERROR);
       setStatus(`❌ Erreur : ${err.message}`);
