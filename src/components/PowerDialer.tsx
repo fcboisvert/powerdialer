@@ -391,7 +391,7 @@ export default function PowerDialer() {
           leadName: get(current, "Full_Name"),
           company: get(current, "Nom_de_la_compagnie"),
           activity: get(current, "Activite_HC"),
-          agent,
+          agent: agentKey, // ← CHANGE THIS from 'agent' to 'agentKey'
           activityName: get(current, "Nom_de_l_Activite"),
         },
       };

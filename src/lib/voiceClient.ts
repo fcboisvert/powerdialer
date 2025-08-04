@@ -3,7 +3,7 @@ import { Device, Call } from '@twilio/voice-sdk';
 
 let device: Device | null = null;
 
-/**
+/** 
  * Initialize Twilio Device with token from serverless function
  * @param agent - The agent identifier (e.g., 'frederic' or 'simon')
  */
